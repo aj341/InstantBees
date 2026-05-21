@@ -340,8 +340,18 @@ export const CreateLeadBody = zod.object({
 
 
 /**
- * @summary Bulk import leads from a JSON array (also accepts CSV text)
+ * Three accepted payload shapes:
+  * `application/json` with `{ leads: [...] }` — explicit lead objects.
+  * `application/json` with `{ csvText: "..." }` — CSV as a string field.
+  * `text/csv` body — raw CSV upload. Use the `campaignId` query parameter to add the
+    imported leads to a campaign in the same request.
+
+ * @summary Bulk import leads from a JSON array, CSV text in JSON, or a raw CSV upload
  */
+export const BulkImportLeadsQueryParams = zod.object({
+  "campaignId": zod.coerce.number().optional().describe('Only used with a `text\/csv` body. Adds all imported leads to this campaign.')
+})
+
 export const BulkImportLeadsBody = zod.object({
   "leads": zod.array(zod.object({
   "email": zod.string(),
@@ -351,10 +361,10 @@ export const BulkImportLeadsBody = zod.object({
   "title": zod.string().optional(),
   "website": zod.string().optional(),
   "phone": zod.string().optional()
-})).describe('Array of lead objects, or pass csvText instead'),
-  "csvText": zod.string().optional().describe('Raw CSV text (email,firstName,lastName,company,title columns)'),
+})).optional().describe('Array of lead objects. Pass `csvText` instead if importing CSV.'),
+  "csvText": zod.string().optional().describe('Raw CSV text with an `email` column plus any of firstName, lastName, company, title, website, phone.'),
   "campaignId": zod.number().optional().describe('Optionally add all imported leads to this campaign')
-})
+}).describe('Provide either `leads` (array) or `csvText` (string). At least one must be present.')
 
 export const BulkImportLeadsResponse = zod.object({
   "imported": zod.number(),

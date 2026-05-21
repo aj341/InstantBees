@@ -355,13 +355,31 @@ paths:
     post:
       operationId: bulkImportLeads
       tags: [leads]
-      summary: Bulk import leads from a JSON array (also accepts CSV text)
+      summary: Bulk import leads from a JSON array, CSV text in JSON, or a raw CSV upload
+      description: |
+        Three accepted payload shapes:
+          * `application/json` with `{ leads: [...] }` — explicit lead objects.
+          * `application/json` with `{ csvText: "..." }` — CSV as a string field.
+          * `text/csv` body — raw CSV upload. Use the `campaignId` query parameter to add the
+            imported leads to a campaign in the same request.
+      parameters:
+        - name: campaignId
+          in: query
+          required: false
+          description: Only used with a `text/csv` body. Adds all imported leads to this campaign.
+          schema:
+            type: integer
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/BulkLeadImport"
+          text/csv:
+            schema:
+              type: string
+              format: binary
+              description: Raw CSV with an `email` column plus any of `firstName`, `lastName`, `company`, `title`, `website`, `phone`.
       responses:
         "200":
           description: Import result
@@ -999,16 +1017,16 @@ components:
 
     BulkLeadImport:
       type: object
-      required: [leads]
+      description: Provide either `leads` (array) or `csvText` (string). At least one must be present.
       properties:
         leads:
           type: array
-          description: Array of lead objects, or pass csvText instead
+          description: Array of lead objects. Pass `csvText` instead if importing CSV.
           items:
             $ref: "#/components/schemas/LeadInput"
         csvText:
           type: string
-          description: Raw CSV text (email,firstName,lastName,company,title columns)
+          description: Raw CSV text with an `email` column plus any of firstName, lastName, company, title, website, phone.
         campaignId:
           type: integer
           description: Optionally add all imported leads to this campaign

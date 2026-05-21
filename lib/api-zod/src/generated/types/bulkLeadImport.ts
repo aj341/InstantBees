@@ -7,10 +7,13 @@
  */
 import type { LeadInput } from './leadInput';
 
+/**
+ * Provide either `leads` (array) or `csvText` (string). At least one must be present.
+ */
 export interface BulkLeadImport {
-  /** Array of lead objects, or pass csvText instead */
-  leads: LeadInput[];
-  /** Raw CSV text (email,firstName,lastName,company,title columns) */
+  /** Array of lead objects. Pass `csvText` instead if importing CSV. */
+  leads?: LeadInput[];
+  /** Raw CSV text with an `email` column plus any of firstName, lastName, company, title, website, phone. */
   csvText?: string;
   /** Optionally add all imported leads to this campaign */
   campaignId?: number;

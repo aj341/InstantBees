@@ -26,8 +26,12 @@ app.use(
   }),
 );
 app.use(cors());
+// Default JSON body limit applies to most routes. The bulk lead import path needs more headroom
+// for large CSVs / lead arrays, but we scope the bump to that route only.
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use("/api/leads/bulk", express.json({ limit: "10mb" }));
+app.use("/api/leads/bulk", express.text({ type: ["text/csv", "application/csv"], limit: "10mb" }));
 
 app.use("/api", router);
 

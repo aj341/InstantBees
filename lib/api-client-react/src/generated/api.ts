@@ -23,6 +23,7 @@ import type {
   AccountTestResult,
   AddLeadsToCampaign200,
   AnalyticsSummary,
+  BulkImportLeadsParams,
   BulkImportResult,
   BulkLeadImport,
   Campaign,
@@ -1318,26 +1319,40 @@ export const useCreateLead = <TError = ErrorType<unknown>,
       return useMutation(getCreateLeadMutationOptions(options));
     }
 
-export const getBulkImportLeadsUrl = () => {
+export const getBulkImportLeadsUrl = (params?: BulkImportLeadsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/leads/bulk`
+  return stringifiedParams.length > 0 ? `/api/leads/bulk?${stringifiedParams}` : `/api/leads/bulk`
 }
 
 /**
- * @summary Bulk import leads from a JSON array (also accepts CSV text)
- */
-export const bulkImportLeads = async (bulkLeadImport: BulkLeadImport, options?: RequestInit): Promise<BulkImportResult> => {
+ * Three accepted payload shapes:
+  * `application/json` with `{ leads: [...] }` — explicit lead objects.
+  * `application/json` with `{ csvText: "..." }` — CSV as a string field.
+  * `text/csv` body — raw CSV upload. Use the `campaignId` query parameter to add the
+    imported leads to a campaign in the same request.
 
-  return customFetch<BulkImportResult>(getBulkImportLeadsUrl(),
+ * @summary Bulk import leads from a JSON array, CSV text in JSON, or a raw CSV upload
+ */
+export const bulkImportLeads = async (bulkImportLeadsBody: BulkLeadImport | Blob,
+    params?: BulkImportLeadsParams, options?: RequestInit): Promise<BulkImportResult> => {
+
+  return customFetch<BulkImportResult>(getBulkImportLeadsUrl(params),
   {
     ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    method: 'POST'
+    ,
     body: JSON.stringify(
-      bulkLeadImport,)
+      bulkImportLeadsBody,)
   }
 );}
 
@@ -1345,8 +1360,8 @@ export const bulkImportLeads = async (bulkLeadImport: BulkLeadImport, options?: 
 
 
 export const getBulkImportLeadsMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkImportLeads>>, TError,{data: BodyType<BulkLeadImport>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof bulkImportLeads>>, TError,{data: BodyType<BulkLeadImport>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkImportLeads>>, TError,{data: BodyType<BulkLeadImport | Blob>;params?: BulkImportLeadsParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkImportLeads>>, TError,{data: BodyType<BulkLeadImport | Blob>;params?: BulkImportLeadsParams}, TContext> => {
 
 const mutationKey = ['bulkImportLeads'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -1358,10 +1373,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkImportLeads>>, {data: BodyType<BulkLeadImport>}> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkImportLeads>>, {data: BodyType<BulkLeadImport | Blob>;params?: BulkImportLeadsParams}> = (props) => {
+          const {data,params} = props ?? {};
 
-          return  bulkImportLeads(data,requestOptions)
+          return  bulkImportLeads(data,params,requestOptions)
         }
 
 
@@ -1372,18 +1387,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type BulkImportLeadsMutationResult = NonNullable<Awaited<ReturnType<typeof bulkImportLeads>>>
-    export type BulkImportLeadsMutationBody = BodyType<BulkLeadImport>
+    export type BulkImportLeadsMutationBody = BodyType<BulkLeadImport | Blob>
     export type BulkImportLeadsMutationError = ErrorType<unknown>
 
     /**
- * @summary Bulk import leads from a JSON array (also accepts CSV text)
+ * @summary Bulk import leads from a JSON array, CSV text in JSON, or a raw CSV upload
  */
 export const useBulkImportLeads = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkImportLeads>>, TError,{data: BodyType<BulkLeadImport>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkImportLeads>>, TError,{data: BodyType<BulkLeadImport | Blob>;params?: BulkImportLeadsParams}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof bulkImportLeads>>,
         TError,
-        {data: BodyType<BulkLeadImport>},
+        {data: BodyType<BulkLeadImport | Blob>;params?: BulkImportLeadsParams},
         TContext
       > => {
       return useMutation(getBulkImportLeadsMutationOptions(options));

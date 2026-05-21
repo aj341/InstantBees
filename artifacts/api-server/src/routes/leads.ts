@@ -12,6 +12,7 @@ import {
   RemoveLeadFromCampaignParams,
   BulkImportLeadsBody,
 } from "@workspace/api-zod";
+import { parseLeadsCsv, type LeadRow } from "../lib/csv";
 
 const router: IRouter = Router();
 
@@ -21,42 +22,60 @@ router.get("/leads", async (_req, res): Promise<void> => {
 });
 
 router.post("/leads/bulk", async (req, res): Promise<void> => {
-  const parsed = BulkImportLeadsBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  type LeadRow = { email: string; firstName?: string; lastName?: string; company?: string; title?: string; website?: string; phone?: string };
   let rawLeads: LeadRow[] = [];
+  let campaignId: number | undefined;
 
-  if (parsed.data.csvText) {
-    const lines = parsed.data.csvText.trim().split("\n");
-    const headers = lines[0].split(",").map((h: string) => h.trim().toLowerCase().replace(/[^a-z]/g, ""));
-    const emailIdx = headers.indexOf("email");
-    const firstIdx = Math.max(headers.indexOf("firstname"), headers.indexOf("firstname"));
-    const lastIdx = Math.max(headers.indexOf("lastname"), headers.indexOf("lastname"));
-    const companyIdx = headers.indexOf("company");
-    const titleIdx = headers.indexOf("title");
-    const websiteIdx = headers.indexOf("website");
-    const phoneIdx = headers.indexOf("phone");
-    if (emailIdx === -1) { res.status(400).json({ error: "CSV must have an 'email' column" }); return; }
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(",").map((c: string) => c.trim().replace(/^"|"$/g, ""));
-      const email = cols[emailIdx];
-      if (!email || !email.includes("@")) continue;
-      rawLeads.push({
-        email,
-        firstName: firstIdx >= 0 ? cols[firstIdx] || undefined : undefined,
-        lastName: lastIdx >= 0 ? cols[lastIdx] || undefined : undefined,
-        company: companyIdx >= 0 ? cols[companyIdx] || undefined : undefined,
-        title: titleIdx >= 0 ? cols[titleIdx] || undefined : undefined,
-        website: websiteIdx >= 0 ? cols[websiteIdx] || undefined : undefined,
-        phone: phoneIdx >= 0 ? cols[phoneIdx] || undefined : undefined,
-      });
+  const contentType = (req.headers["content-type"] ?? "").toLowerCase();
+  const isCsvUpload = contentType.includes("text/csv") || contentType.includes("application/csv");
+
+  if (isCsvUpload) {
+    // Direct CSV upload via:
+    //   curl -X POST -H "Content-Type: text/csv" --data-binary @leads.csv \
+    //        '<host>/api/leads/bulk?campaignId=123'
+    const csvText = typeof req.body === "string" ? req.body : "";
+    if (!csvText.trim()) {
+      res.status(400).json({ error: "Empty CSV body" });
+      return;
+    }
+    const { leads, error } = parseLeadsCsv(csvText);
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+    rawLeads = leads;
+
+    const rawCampaignId = req.query["campaignId"];
+    if (typeof rawCampaignId === "string" && rawCampaignId.length > 0) {
+      // Strict: must be a positive integer with no extra characters.
+      if (!/^[1-9]\d*$/.test(rawCampaignId)) {
+        res.status(400).json({ error: "campaignId must be a positive integer" });
+        return;
+      }
+      campaignId = parseInt(rawCampaignId, 10);
     }
   } else {
-    rawLeads = parsed.data.leads as LeadRow[];
+    const parsed = BulkImportLeadsBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+    const hasLeads = Array.isArray(parsed.data.leads) && parsed.data.leads.length > 0;
+    const hasCsv = typeof parsed.data.csvText === "string" && parsed.data.csvText.trim().length > 0;
+    if (!hasLeads && !hasCsv) {
+      res.status(400).json({ error: "Provide either 'leads' or 'csvText'" });
+      return;
+    }
+    if (hasCsv) {
+      const { leads, error } = parseLeadsCsv(parsed.data.csvText!);
+      if (error) {
+        res.status(400).json({ error });
+        return;
+      }
+      rawLeads = leads;
+    } else {
+      rawLeads = parsed.data.leads as LeadRow[];
+    }
+    campaignId = parsed.data.campaignId ?? undefined;
   }
 
   let imported = 0;
@@ -83,11 +102,11 @@ router.post("/leads/bulk", async (req, res): Promise<void> => {
     } catch { skipped++; }
   }
 
-  if (parsed.data.campaignId && leadIds.length > 0) {
-    const rows = leadIds.map((lid) => ({ campaignId: parsed.data.campaignId!, leadId: lid }));
+  if (campaignId !== undefined && leadIds.length > 0) {
+    const rows = leadIds.map((lid) => ({ campaignId: campaignId!, leadId: lid }));
     await db.insert(campaignLeadsTable).values(rows).onConflictDoNothing();
-    const count = await db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.campaignId, parsed.data.campaignId!));
-    await db.update(campaignsTable).set({ leadsCount: count.length }).where(eq(campaignsTable.id, parsed.data.campaignId!));
+    const count = await db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.campaignId, campaignId));
+    await db.update(campaignsTable).set({ leadsCount: count.length }).where(eq(campaignsTable.id, campaignId));
   }
 
   res.json({ imported, skipped, total: rawLeads.length, leadIds });

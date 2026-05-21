@@ -9,6 +9,7 @@
 export * from './accountTestResult';
 export * from './addLeadsToCampaign200';
 export * from './analyticsSummary';
+export * from './bulkImportLeadsParams';
 export * from './bulkImportResult';
 export * from './bulkLeadImport';
 export * from './campaign';
