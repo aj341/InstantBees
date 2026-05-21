@@ -67,6 +67,7 @@ export interface SendInput {
   to: string;
   toName?: string | null;
   subject: string;
+  previewText?: string | null;
   body: string;
   bodyType: "text" | "html" | string;
   trackingToken?: string;
@@ -167,6 +168,27 @@ function wrapPlainTextAsHtml(text: string): string {
     .join("");
 }
 
+/**
+ * Inject a hidden preheader (preview text) at the very top of the HTML body.
+ * Most email clients (Gmail, Outlook, Apple Mail) show this snippet in the inbox list
+ * next to the subject. The combination of `display:none` + the trailing whitespace
+ * span is a well-known trick to keep the preview from leaking the surrounding body.
+ */
+function injectPreheader(html: string, previewText: string): string {
+  if (!previewText) return html;
+  const escaped = previewText
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  const preheader =
+    `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${escaped}</div>` +
+    `<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${"&zwnj;&nbsp;".repeat(60)}</div>`;
+  if (/<body[^>]*>/i.test(html)) {
+    return html.replace(/<body([^>]*)>/i, `<body$1>${preheader}`);
+  }
+  return preheader + html;
+}
+
 function injectHtmlFooter(html: string, pixelUrl: string | null, unsubUrl: string | null): string {
   const footerParts: string[] = [];
   if (unsubUrl) {
@@ -228,7 +250,8 @@ export async function sendEmail(account: AccountWithSecret, input: SendInput): P
   // Gmail/Outlook render them as a coherent message rather than collapsing them behind "…".
   const htmlBody = isHtml ? bodyForSend : wrapPlainTextAsHtml(bodyForSend);
   const textBody = isHtml ? stripHtml(bodyForSend) : bodyForSend;
-  mailOptions.html = injectHtmlFooter(htmlBody, pixelUrl, unsubUrl);
+  const preview = (input.previewText ?? "").trim();
+  mailOptions.html = injectHtmlFooter(injectPreheader(htmlBody, preview), pixelUrl, unsubUrl);
   mailOptions.text = buildTextFooter(textBody, unsubUrl);
 
   const info = await transport.sendMail(mailOptions);

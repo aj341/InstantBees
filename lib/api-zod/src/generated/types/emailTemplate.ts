@@ -11,6 +11,8 @@ export interface EmailTemplate {
   id: number;
   name: string;
   subject: string;
+  /** @nullable */
+  previewText?: string | null;
   body: string;
   bodyType: EmailTemplateBodyType;
   createdAt: string;

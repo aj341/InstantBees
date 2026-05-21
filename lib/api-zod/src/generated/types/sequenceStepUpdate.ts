@@ -9,6 +9,7 @@ import type { SequenceStepUpdateBodyType } from './sequenceStepUpdateBodyType';
 
 export interface SequenceStepUpdate {
   subject?: string;
+  previewText?: string;
   body?: string;
   bodyType?: SequenceStepUpdateBodyType;
   delayDays?: number;

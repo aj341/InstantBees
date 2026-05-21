@@ -5,6 +5,7 @@
  * Instantly.ai clone API
  * OpenAPI spec version: 0.1.0
  */
+import type { Label } from './label';
 import type { LeadStatus } from './leadStatus';
 
 export interface Lead {
@@ -23,5 +24,6 @@ export interface Lead {
   /** @nullable */
   phone?: string | null;
   status?: LeadStatus;
+  labels: Label[];
   createdAt: string;
 }

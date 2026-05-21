@@ -10,6 +10,7 @@ import type { UpdateTemplateInputBodyType } from './updateTemplateInputBodyType'
 export interface UpdateTemplateInput {
   name?: string;
   subject?: string;
+  previewText?: string;
   body?: string;
   bodyType?: UpdateTemplateInputBodyType;
 }

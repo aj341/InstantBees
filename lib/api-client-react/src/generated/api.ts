@@ -41,6 +41,8 @@ import type {
   HealthStatus,
   InboxMessage,
   InboxMessageUpdate,
+  Label,
+  LabelInput,
   Lead,
   LeadInput,
   LeadUpdate,
@@ -51,6 +53,7 @@ import type {
   SequenceStep,
   SequenceStepInput,
   SequenceStepUpdate,
+  SetLeadLabelsInput,
   UpdateTemplateInput
 } from './api.schemas';
 
@@ -804,6 +807,296 @@ export function useGetCampaignAnalytics<TData = Awaited<ReturnType<typeof getCam
 
 
 
+
+export const getListLabelsUrl = () => {
+
+
+
+
+  return `/api/labels`
+}
+
+/**
+ * @summary List all labels
+ */
+export const listLabels = async ( options?: RequestInit): Promise<Label[]> => {
+
+  return customFetch<Label[]>(getListLabelsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLabelsQueryKey = () => {
+    return [
+    `/api/labels`
+    ] as const;
+    }
+
+
+export const getListLabelsQueryOptions = <TData = Awaited<ReturnType<typeof listLabels>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLabels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLabelsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLabels>>> = ({ signal }) => listLabels({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLabels>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListLabelsQueryResult = NonNullable<Awaited<ReturnType<typeof listLabels>>>
+export type ListLabelsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all labels
+ */
+
+export function useListLabels<TData = Awaited<ReturnType<typeof listLabels>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLabels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListLabelsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateLabelUrl = () => {
+
+
+
+
+  return `/api/labels`
+}
+
+/**
+ * @summary Create a label
+ */
+export const createLabel = async (labelInput: LabelInput, options?: RequestInit): Promise<Label> => {
+
+  return customFetch<Label>(getCreateLabelUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      labelInput,)
+  }
+);}
+
+
+
+
+export const getCreateLabelMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLabel>>, TError,{data: BodyType<LabelInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createLabel>>, TError,{data: BodyType<LabelInput>}, TContext> => {
+
+const mutationKey = ['createLabel'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createLabel>>, {data: BodyType<LabelInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createLabel(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateLabelMutationResult = NonNullable<Awaited<ReturnType<typeof createLabel>>>
+    export type CreateLabelMutationBody = BodyType<LabelInput>
+    export type CreateLabelMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a label
+ */
+export const useCreateLabel = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLabel>>, TError,{data: BodyType<LabelInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createLabel>>,
+        TError,
+        {data: BodyType<LabelInput>},
+        TContext
+      > => {
+      return useMutation(getCreateLabelMutationOptions(options));
+    }
+
+export const getDeleteLabelUrl = (id: number,) => {
+
+
+
+
+  return `/api/labels/${id}`
+}
+
+/**
+ * @summary Delete a label
+ */
+export const deleteLabel = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteLabelUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteLabelMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLabel>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteLabel>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteLabel'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteLabel>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteLabel(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteLabelMutationResult = NonNullable<Awaited<ReturnType<typeof deleteLabel>>>
+
+    export type DeleteLabelMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a label
+ */
+export const useDeleteLabel = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLabel>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteLabel>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteLabelMutationOptions(options));
+    }
+
+export const getSetLeadLabelsUrl = (id: number,) => {
+
+
+
+
+  return `/api/leads/${id}/labels`
+}
+
+/**
+ * @summary Replace the set of labels on a lead
+ */
+export const setLeadLabels = async (id: number,
+    setLeadLabelsInput: SetLeadLabelsInput, options?: RequestInit): Promise<Lead> => {
+
+  return customFetch<Lead>(getSetLeadLabelsUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      setLeadLabelsInput,)
+  }
+);}
+
+
+
+
+export const getSetLeadLabelsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setLeadLabels>>, TError,{id: number;data: BodyType<SetLeadLabelsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setLeadLabels>>, TError,{id: number;data: BodyType<SetLeadLabelsInput>}, TContext> => {
+
+const mutationKey = ['setLeadLabels'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setLeadLabels>>, {id: number;data: BodyType<SetLeadLabelsInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setLeadLabels(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetLeadLabelsMutationResult = NonNullable<Awaited<ReturnType<typeof setLeadLabels>>>
+    export type SetLeadLabelsMutationBody = BodyType<SetLeadLabelsInput>
+    export type SetLeadLabelsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Replace the set of labels on a lead
+ */
+export const useSetLeadLabels = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setLeadLabels>>, TError,{id: number;data: BodyType<SetLeadLabelsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setLeadLabels>>,
+        TError,
+        {id: number;data: BodyType<SetLeadLabelsInput>},
+        TContext
+      > => {
+      return useMutation(getSetLeadLabelsMutationOptions(options));
+    }
 
 export const getGetCampaignLinkClicksUrl = (id: number,) => {
 

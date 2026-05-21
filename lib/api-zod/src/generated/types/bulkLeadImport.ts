@@ -17,4 +17,6 @@ export interface BulkLeadImport {
   csvText?: string;
   /** Optionally add all imported leads to this campaign */
   campaignId?: number;
+  /** Optionally apply these labels to all imported leads */
+  labelIds?: number[];
 }

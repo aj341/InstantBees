@@ -62,6 +62,7 @@ import { EmailPreview } from "@/components/email-editor/email-preview";
 
 const seqSchema = z.object({
   subject: z.string().min(1, "Subject required"),
+  previewText: z.string().optional(),
   body: z.string().min(1, "Body required"),
   bodyType: z.enum(["text", "html"]).default("text"),
   delayDays: z.coerce.number().min(0).default(0),
@@ -83,7 +84,7 @@ export default function CampaignDetail() {
   const queryClient = useQueryClient();
 
   const [seqDialogOpen, setSeqDialogOpen] = useState(false);
-  const [editStep, setEditStep] = useState<{ id: number; subject: string; body: string; bodyType: "text" | "html"; delayDays: number } | null>(null);
+  const [editStep, setEditStep] = useState<{ id: number; subject: string; previewText?: string | null; body: string; bodyType: "text" | "html"; delayDays: number } | null>(null);
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
@@ -251,7 +252,7 @@ export default function CampaignDetail() {
 
   const seqForm = useForm<SeqForm>({
     resolver: zodResolver(seqSchema),
-    defaultValues: { subject: "", body: "", bodyType: "text", delayDays: 0 },
+    defaultValues: { subject: "", previewText: "", body: "", bodyType: "text", delayDays: 0 },
   });
 
   function onSeqSubmit(values: SeqForm) {
@@ -262,17 +263,17 @@ export default function CampaignDetail() {
     }
   }
 
-  function openEdit(step: { id: number; subject: string; body: string; bodyType: "text" | "html"; delayDays: number }) {
+  function openEdit(step: { id: number; subject: string; previewText?: string | null; body: string; bodyType: "text" | "html"; delayDays: number }) {
     setEditStep(step);
     const bt = step.bodyType ?? "text";
-    seqForm.reset({ subject: step.subject, body: step.body, bodyType: bt, delayDays: step.delayDays });
+    seqForm.reset({ subject: step.subject, previewText: step.previewText ?? "", body: step.body, bodyType: bt, delayDays: step.delayDays });
     setEditorMode(inferEditorMode(step.body, bt));
     setSeqDialogOpen(true);
   }
 
   function openCreate() {
     setEditStep(null);
-    seqForm.reset({ subject: "", body: "", bodyType: "text", delayDays: 0 });
+    seqForm.reset({ subject: "", previewText: "", body: "", bodyType: "text", delayDays: 0 });
     setEditorMode("text");
     setSeqDialogOpen(true);
   }
@@ -614,6 +615,7 @@ export default function CampaignDetail() {
                 className="w-full text-left p-3 rounded-md border border-border hover:bg-accent transition-colors"
                 onClick={() => {
                   seqForm.setValue("subject", t.subject);
+                  seqForm.setValue("previewText", t.previewText ?? "");
                   seqForm.setValue("body", t.body);
                   const bt = (t.bodyType as "text" | "html") ?? "text";
                   seqForm.setValue("bodyType", bt);
@@ -660,7 +662,15 @@ export default function CampaignDetail() {
               <FormField control={seqForm.control} name="subject" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Subject</FormLabel>
-                  <FormControl><Input placeholder="Re: Quick question about {{company}}" data-testid="input-step-subject" {...field} /></FormControl>
+                  <FormControl><Input placeholder="Re: Quick question about {{company}}" data-testid="input-step-subject" {...field} value={field.value ?? ""} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={seqForm.control} name="previewText" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Preview Text <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                  <FormControl><Input placeholder="Short snippet shown next to the subject in the inbox preview" data-testid="input-step-preview-text" {...field} value={field.value ?? ""} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -738,6 +748,7 @@ export default function CampaignDetail() {
                     body={seqForm.watch("body") || ""}
                     bodyType={editorMode === "text" ? "text" : "html"}
                     subject={seqForm.watch("subject") || undefined}
+                    previewText={seqForm.watch("previewText") || undefined}
                   />
                 </div>
               )}

@@ -119,10 +119,12 @@ router.post("/campaigns/:id/sequences/:stepId/test", async (req, res): Promise<v
   try {
     const subject = "[TEST] " + renderMergeFields(step.subject, previewVars);
     const renderedBody = renderMergeFields(step.body, previewVars);
+    const previewText = step.previewText ? renderMergeFields(step.previewText, previewVars) : null;
     await sendEmail(account, {
       to: body.data.toEmail,
       toName: null,
       subject,
+      previewText,
       body: renderedBody,
       bodyType: step.bodyType,
     });

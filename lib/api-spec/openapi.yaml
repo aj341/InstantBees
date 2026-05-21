@@ -201,6 +201,78 @@ paths:
               schema:
                 $ref: "#/components/schemas/CampaignAnalytics"
 
+  /labels:
+    get:
+      operationId: listLabels
+      tags: [labels]
+      summary: List all labels
+      responses:
+        "200":
+          description: List of labels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Label"
+    post:
+      operationId: createLabel
+      tags: [labels]
+      summary: Create a label
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LabelInput"
+      responses:
+        "201":
+          description: Created label
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Label"
+
+  /labels/{id}:
+    delete:
+      operationId: deleteLabel
+      tags: [labels]
+      summary: Delete a label
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /leads/{id}/labels:
+    put:
+      operationId: setLeadLabels
+      tags: [leads]
+      summary: Replace the set of labels on a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetLeadLabelsInput"
+      responses:
+        "200":
+          description: Updated lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+
   /campaigns/{id}/link-clicks:
     get:
       operationId: getCampaignLinkClicks
@@ -997,6 +1069,8 @@ components:
           type: integer
         subject:
           type: string
+        previewText:
+          type: ["string", "null"]
         body:
           type: string
         bodyType:
@@ -1013,6 +1087,8 @@ components:
       properties:
         subject:
           type: string
+        previewText:
+          type: string
         body:
           type: string
         bodyType:
@@ -1026,6 +1102,8 @@ components:
       properties:
         subject:
           type: string
+        previewText:
+          type: string
         body:
           type: string
         bodyType:
@@ -1038,7 +1116,7 @@ components:
 
     Lead:
       type: object
-      required: [id, email, createdAt]
+      required: [id, email, createdAt, labels]
       properties:
         id:
           type: integer
@@ -1059,8 +1137,43 @@ components:
         status:
           type: string
           enum: [active, unsubscribed, bounced, replied]
+        labels:
+          type: array
+          items:
+            $ref: "#/components/schemas/Label"
         createdAt:
           type: string
+
+    Label:
+      type: object
+      required: [id, name, color, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        color:
+          type: string
+        createdAt:
+          type: string
+
+    LabelInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+
+    SetLeadLabelsInput:
+      type: object
+      required: [labelIds]
+      properties:
+        labelIds:
+          type: array
+          items:
+            type: integer
 
     LeadInput:
       type: object
@@ -1117,6 +1230,11 @@ components:
         campaignId:
           type: integer
           description: Optionally add all imported leads to this campaign
+        labelIds:
+          type: array
+          description: Optionally apply these labels to all imported leads
+          items:
+            type: integer
 
     BulkImportResult:
       type: object
@@ -1300,6 +1418,8 @@ components:
           type: string
         subject:
           type: string
+        previewText:
+          type: ["string", "null"]
         body:
           type: string
         bodyType:
@@ -1316,6 +1436,8 @@ components:
           type: string
         subject:
           type: string
+        previewText:
+          type: string
         body:
           type: string
         bodyType:
@@ -1328,6 +1450,8 @@ components:
         name:
           type: string
         subject:
+          type: string
+        previewText:
           type: string
         body:
           type: string

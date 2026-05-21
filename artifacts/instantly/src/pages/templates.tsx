@@ -25,6 +25,7 @@ import { EmailPreview } from "@/components/email-editor/email-preview";
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
   subject: z.string().min(1, "Subject is required"),
+  previewText: z.string().optional(),
   body: z.string().min(1, "Body is required"),
   bodyType: z.enum(["text", "html"]).default("text"),
 });
@@ -35,6 +36,7 @@ type Template = {
   id: number;
   name: string;
   subject: string;
+  previewText?: string | null;
   body: string;
   bodyType: string;
   createdAt: string;
@@ -93,12 +95,12 @@ export default function Templates() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", subject: "", body: "", bodyType: "text" },
+    defaultValues: { name: "", subject: "", previewText: "", body: "", bodyType: "text" },
   });
 
   function openCreate() {
     setEditingTemplate(null);
-    form.reset({ name: "", subject: "", body: "", bodyType: "text" });
+    form.reset({ name: "", subject: "", previewText: "", body: "", bodyType: "text" });
     setEditorMode("text");
     setDialogOpen(true);
   }
@@ -106,7 +108,7 @@ export default function Templates() {
   function openEdit(t: Template) {
     setEditingTemplate(t);
     const bt = (t.bodyType as "text" | "html") ?? "text";
-    form.reset({ name: t.name, subject: t.subject, body: t.body, bodyType: bt });
+    form.reset({ name: t.name, subject: t.subject, previewText: t.previewText ?? "", body: t.body, bodyType: bt });
     setEditorMode(inferEditorMode(t.body, bt));
     setDialogOpen(true);
   }
@@ -207,6 +209,14 @@ export default function Templates() {
                 </FormItem>
               )} />
 
+              <FormField control={form.control} name="previewText" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Preview Text <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                  <FormControl><Input placeholder="Short snippet shown next to the subject in the inbox preview" data-testid="input-template-preview-text" {...field} value={field.value ?? ""} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
               <FormField control={form.control} name="subject" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Subject Line</FormLabel>
@@ -287,6 +297,7 @@ export default function Templates() {
                     body={form.watch("body") || ""}
                     bodyType="html"
                     subject={form.watch("subject") || undefined}
+                    previewText={form.watch("previewText") || undefined}
                   />
                 </div>
               )}
@@ -296,6 +307,7 @@ export default function Templates() {
                     body={form.watch("body") || ""}
                     bodyType="text"
                     subject={form.watch("subject") || undefined}
+                    previewText={form.watch("previewText") || undefined}
                   />
                 </div>
               )}

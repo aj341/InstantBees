@@ -6,6 +6,7 @@ export const emailTemplatesTable = pgTable("email_templates", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   subject: text("subject").notNull(),
+  previewText: text("preview_text"),
   body: text("body").notNull(),
   bodyType: text("body_type").notNull().default("text"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

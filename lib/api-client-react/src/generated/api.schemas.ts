@@ -135,6 +135,8 @@ export interface SequenceStep {
   campaignId: number;
   stepNumber: number;
   subject: string;
+  /** @nullable */
+  previewText?: string | null;
   body: string;
   bodyType: SequenceStepBodyType;
   delayDays: number;
@@ -151,6 +153,7 @@ export const SequenceStepInputBodyType = {
 
 export interface SequenceStepInput {
   subject: string;
+  previewText?: string;
   body: string;
   bodyType?: SequenceStepInputBodyType;
   delayDays: number;
@@ -166,6 +169,7 @@ export const SequenceStepUpdateBodyType = {
 
 export interface SequenceStepUpdate {
   subject?: string;
+  previewText?: string;
   body?: string;
   bodyType?: SequenceStepUpdateBodyType;
   delayDays?: number;
@@ -180,6 +184,13 @@ export const LeadStatus = {
   bounced: 'bounced',
   replied: 'replied',
 } as const;
+
+export interface Label {
+  id: number;
+  name: string;
+  color: string;
+  createdAt: string;
+}
 
 export interface Lead {
   id: number;
@@ -197,7 +208,17 @@ export interface Lead {
   /** @nullable */
   phone?: string | null;
   status?: LeadStatus;
+  labels: Label[];
   createdAt: string;
+}
+
+export interface LabelInput {
+  name: string;
+  color?: string;
+}
+
+export interface SetLeadLabelsInput {
+  labelIds: number[];
 }
 
 export interface LeadInput {
@@ -241,6 +262,8 @@ export interface BulkLeadImport {
   csvText?: string;
   /** Optionally add all imported leads to this campaign */
   campaignId?: number;
+  /** Optionally apply these labels to all imported leads */
+  labelIds?: number[];
 }
 
 export interface BulkImportResult {
@@ -399,6 +422,8 @@ export interface EmailTemplate {
   id: number;
   name: string;
   subject: string;
+  /** @nullable */
+  previewText?: string | null;
   body: string;
   bodyType: EmailTemplateBodyType;
   createdAt: string;
@@ -415,6 +440,7 @@ export const CreateTemplateInputBodyType = {
 export interface CreateTemplateInput {
   name: string;
   subject: string;
+  previewText?: string;
   body: string;
   bodyType?: CreateTemplateInputBodyType;
 }
@@ -430,6 +456,7 @@ export const UpdateTemplateInputBodyType = {
 export interface UpdateTemplateInput {
   name?: string;
   subject?: string;
+  previewText?: string;
   body?: string;
   bodyType?: UpdateTemplateInputBodyType;
 }

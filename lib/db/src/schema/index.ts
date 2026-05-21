@@ -9,3 +9,4 @@ export * from "./lists";
 export * from "./send-jobs";
 export * from "./unsubscribes";
 export * from "./click-events";
+export * from "./labels";

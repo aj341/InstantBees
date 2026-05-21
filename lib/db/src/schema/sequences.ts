@@ -7,6 +7,7 @@ export const sequenceStepsTable = pgTable("sequence_steps", {
   campaignId: integer("campaign_id").notNull(),
   stepNumber: integer("step_number").notNull().default(1),
   subject: text("subject").notNull(),
+  previewText: text("preview_text"),
   body: text("body").notNull(),
   bodyType: text("body_type").notNull().default("text"),
   delayDays: integer("delay_days").notNull().default(0),

@@ -95,6 +95,7 @@ async function processOnce(): Promise<void> {
       };
       const subject = renderMergeFields(step.subject, vars);
       const body = renderMergeFields(step.body, vars);
+      const previewText = step.previewText ? renderMergeFields(step.previewText, vars) : null;
 
       const publicBaseUrl = getPublicBaseUrl();
       const trackingToken = campaign.trackOpens || campaign.trackClicks ? (job.trackingToken ?? generateTrackingToken()) : null;
@@ -124,6 +125,7 @@ async function processOnce(): Promise<void> {
         to: lead.email,
         toName: [lead.firstName, lead.lastName].filter(Boolean).join(" ") || null,
         subject,
+        previewText,
         body,
         bodyType: step.bodyType,
         trackingToken: trackingToken ?? undefined,

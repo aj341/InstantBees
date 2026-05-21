@@ -225,6 +225,66 @@ export const GetCampaignAnalyticsResponse = zod.object({
 
 
 /**
+ * @summary List all labels
+ */
+export const ListLabelsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.string()
+})
+export const ListLabelsResponse = zod.array(ListLabelsResponseItem)
+
+
+/**
+ * @summary Create a label
+ */
+export const CreateLabelBody = zod.object({
+  "name": zod.string(),
+  "color": zod.string().optional()
+})
+
+
+/**
+ * @summary Delete a label
+ */
+export const DeleteLabelParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Replace the set of labels on a lead
+ */
+export const SetLeadLabelsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SetLeadLabelsBody = zod.object({
+  "labelIds": zod.array(zod.number())
+})
+
+export const SetLeadLabelsResponse = zod.object({
+  "id": zod.number(),
+  "email": zod.string(),
+  "firstName": zod.string().nullish(),
+  "lastName": zod.string().nullish(),
+  "company": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "status": zod.enum(['active', 'unsubscribed', 'bounced', 'replied']).optional(),
+  "labels": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.string()
+})),
+  "createdAt": zod.string()
+})
+
+
+/**
  * @summary Per-link click breakdown for a campaign
  */
 export const GetCampaignLinkClicksParams = zod.object({
@@ -252,6 +312,7 @@ export const ListSequencesResponseItem = zod.object({
   "campaignId": zod.number(),
   "stepNumber": zod.number(),
   "subject": zod.string(),
+  "previewText": zod.string().nullish(),
   "body": zod.string(),
   "bodyType": zod.enum(['text', 'html']),
   "delayDays": zod.number(),
@@ -269,6 +330,7 @@ export const CreateSequenceParams = zod.object({
 
 export const CreateSequenceBody = zod.object({
   "subject": zod.string(),
+  "previewText": zod.string().optional(),
   "body": zod.string(),
   "bodyType": zod.enum(['text', 'html']).optional(),
   "delayDays": zod.number()
@@ -304,6 +366,7 @@ export const UpdateSequenceParams = zod.object({
 
 export const UpdateSequenceBody = zod.object({
   "subject": zod.string().optional(),
+  "previewText": zod.string().optional(),
   "body": zod.string().optional(),
   "bodyType": zod.enum(['text', 'html']).optional(),
   "delayDays": zod.number().optional()
@@ -314,6 +377,7 @@ export const UpdateSequenceResponse = zod.object({
   "campaignId": zod.number(),
   "stepNumber": zod.number(),
   "subject": zod.string(),
+  "previewText": zod.string().nullish(),
   "body": zod.string(),
   "bodyType": zod.enum(['text', 'html']),
   "delayDays": zod.number(),
@@ -343,6 +407,12 @@ export const ListLeadsResponseItem = zod.object({
   "website": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "status": zod.enum(['active', 'unsubscribed', 'bounced', 'replied']).optional(),
+  "labels": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.string()
+})),
   "createdAt": zod.string()
 })
 export const ListLeadsResponse = zod.array(ListLeadsResponseItem)
@@ -404,7 +474,8 @@ export const BulkImportLeadsBody = zod.object({
   "phone": zod.string().optional()
 })).optional().describe('Array of lead objects. Pass `csvText` instead if importing CSV.'),
   "csvText": zod.string().optional().describe('Raw CSV text with an `email` column plus any of firstName, lastName, company, title, website, phone.'),
-  "campaignId": zod.number().optional().describe('Optionally add all imported leads to this campaign')
+  "campaignId": zod.number().optional().describe('Optionally add all imported leads to this campaign'),
+  "labelIds": zod.array(zod.number()).optional().describe('Optionally apply these labels to all imported leads')
 }).describe('Provide either `leads` (array) or `csvText` (string). At least one must be present.')
 
 export const BulkImportLeadsResponse = zod.object({
@@ -443,6 +514,12 @@ export const UpdateLeadResponse = zod.object({
   "website": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "status": zod.enum(['active', 'unsubscribed', 'bounced', 'replied']).optional(),
+  "labels": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.string()
+})),
   "createdAt": zod.string()
 })
 
@@ -472,6 +549,12 @@ export const ListCampaignLeadsResponseItem = zod.object({
   "website": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "status": zod.enum(['active', 'unsubscribed', 'bounced', 'replied']).optional(),
+  "labels": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.string()
+})),
   "createdAt": zod.string()
 })
 export const ListCampaignLeadsResponse = zod.array(ListCampaignLeadsResponseItem)
@@ -678,6 +761,7 @@ export const ListTemplatesResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "subject": zod.string(),
+  "previewText": zod.string().nullish(),
   "body": zod.string(),
   "bodyType": zod.enum(['text', 'html']),
   "createdAt": zod.string()
@@ -691,6 +775,7 @@ export const ListTemplatesResponse = zod.array(ListTemplatesResponseItem)
 export const CreateTemplateBody = zod.object({
   "name": zod.string(),
   "subject": zod.string(),
+  "previewText": zod.string().optional(),
   "body": zod.string(),
   "bodyType": zod.enum(['text', 'html']).optional()
 })
@@ -707,6 +792,7 @@ export const GetTemplateResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "subject": zod.string(),
+  "previewText": zod.string().nullish(),
   "body": zod.string(),
   "bodyType": zod.enum(['text', 'html']),
   "createdAt": zod.string()
@@ -723,6 +809,7 @@ export const UpdateTemplateParams = zod.object({
 export const UpdateTemplateBody = zod.object({
   "name": zod.string().optional(),
   "subject": zod.string().optional(),
+  "previewText": zod.string().optional(),
   "body": zod.string().optional(),
   "bodyType": zod.enum(['text', 'html']).optional()
 })
@@ -731,6 +818,7 @@ export const UpdateTemplateResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "subject": zod.string(),
+  "previewText": zod.string().nullish(),
   "body": zod.string(),
   "bodyType": zod.enum(['text', 'html']),
   "createdAt": zod.string()

@@ -6,6 +6,7 @@ interface EmailPreviewProps {
   body: string;
   bodyType: "text" | "html";
   subject?: string;
+  previewText?: string;
   className?: string;
 }
 
@@ -42,7 +43,7 @@ function buildDocument(body: string, bodyType: "text" | "html"): string {
 </head><body>${inner}</body></html>`;
 }
 
-export function EmailPreview({ body, bodyType, subject, className }: EmailPreviewProps) {
+export function EmailPreview({ body, bodyType, subject, previewText, className }: EmailPreviewProps) {
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
 
   const doc = useMemo(() => buildDocument(body, bodyType), [body, bodyType]);
@@ -84,9 +85,16 @@ export function EmailPreview({ body, bodyType, subject, className }: EmailPrevie
       </div>
       <div className="flex justify-center bg-muted/10 py-4">
         <div className={cn("rounded-md border border-border bg-white shadow-sm transition-all", widthClass)}>
-          {subject && (
-            <div className="border-b border-border px-4 py-2 text-sm font-medium text-gray-700">
-              {subject}
+          {(subject || previewText) && (
+            <div className="border-b border-border px-4 py-2">
+              {subject && (
+                <div className="text-sm font-medium text-gray-700">{subject}</div>
+              )}
+              {previewText && (
+                <div className="text-xs text-gray-500 mt-0.5 line-clamp-1" title={previewText}>
+                  {previewText}
+                </div>
+              )}
             </div>
           )}
           <iframe

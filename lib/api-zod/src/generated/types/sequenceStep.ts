@@ -12,6 +12,8 @@ export interface SequenceStep {
   campaignId: number;
   stepNumber: number;
   subject: string;
+  /** @nullable */
+  previewText?: string | null;
   body: string;
   bodyType: SequenceStepBodyType;
   delayDays: number;

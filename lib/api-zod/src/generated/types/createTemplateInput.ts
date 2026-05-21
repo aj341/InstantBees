@@ -10,6 +10,7 @@ import type { CreateTemplateInputBodyType } from './createTemplateInputBodyType'
 export interface CreateTemplateInput {
   name: string;
   subject: string;
+  previewText?: string;
   body: string;
   bodyType?: CreateTemplateInputBodyType;
 }

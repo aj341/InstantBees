@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, leadsTable, campaignLeadsTable, campaignsTable } from "@workspace/db";
+import { eq, and, inArray } from "drizzle-orm";
+import { db, leadsTable, campaignLeadsTable, campaignsTable, labelsTable, leadLabelsTable, type Lead, type Label } from "@workspace/db";
 import {
   CreateLeadBody,
   UpdateLeadBody,
@@ -16,9 +16,33 @@ import { parseLeadsCsv, type LeadRow } from "../lib/csv";
 
 const router: IRouter = Router();
 
+async function attachLabels<T extends Pick<Lead, "id">>(leads: T[]): Promise<(T & { labels: Label[] })[]> {
+  if (leads.length === 0) return [];
+  const ids = leads.map((l) => l.id);
+  const rows = await db
+    .select({
+      leadId: leadLabelsTable.leadId,
+      id: labelsTable.id,
+      name: labelsTable.name,
+      color: labelsTable.color,
+      createdAt: labelsTable.createdAt,
+    })
+    .from(leadLabelsTable)
+    .innerJoin(labelsTable, eq(leadLabelsTable.labelId, labelsTable.id))
+    .where(inArray(leadLabelsTable.leadId, ids));
+  const byLead = new Map<number, Label[]>();
+  for (const r of rows) {
+    const { leadId, ...lbl } = r;
+    const list = byLead.get(leadId) ?? [];
+    list.push(lbl as Label);
+    byLead.set(leadId, list);
+  }
+  return leads.map((l) => ({ ...l, labels: byLead.get(l.id) ?? [] }));
+}
+
 router.get("/leads", async (_req, res): Promise<void> => {
   const leads = await db.select().from(leadsTable).orderBy(leadsTable.createdAt);
-  res.json(leads);
+  res.json(await attachLabels(leads));
 });
 
 router.post("/leads/bulk", async (req, res): Promise<void> => {
@@ -109,6 +133,30 @@ router.post("/leads/bulk", async (req, res): Promise<void> => {
     await db.update(campaignsTable).set({ leadsCount: count.length }).where(eq(campaignsTable.id, campaignId));
   }
 
+  // Apply labels to all imported leads, if requested.
+  const labelIds: number[] = (() => {
+    if (isCsvUpload) {
+      const raw = req.query["labelIds"];
+      if (typeof raw === "string" && raw.length > 0) {
+        return raw.split(",").map((s) => parseInt(s, 10)).filter((n) => Number.isFinite(n) && n > 0);
+      }
+      return [];
+    }
+    const body = req.body as { labelIds?: unknown };
+    return Array.isArray(body?.labelIds)
+      ? (body.labelIds as unknown[]).filter((n): n is number => typeof n === "number" && Number.isFinite(n))
+      : [];
+  })();
+
+  if (labelIds.length > 0 && leadIds.length > 0) {
+    const validLabels = await db.select({ id: labelsTable.id }).from(labelsTable).where(inArray(labelsTable.id, labelIds));
+    const validIds = validLabels.map((v) => v.id);
+    if (validIds.length > 0) {
+      const linkRows = leadIds.flatMap((lid) => validIds.map((lblId) => ({ leadId: lid, labelId: lblId })));
+      await db.insert(leadLabelsTable).values(linkRows).onConflictDoNothing();
+    }
+  }
+
   res.json({ imported, skipped, total: rawLeads.length, leadIds });
 });
 
@@ -119,7 +167,7 @@ router.post("/leads", async (req, res): Promise<void> => {
     return;
   }
   const [lead] = await db.insert(leadsTable).values(parsed.data).returning();
-  res.status(201).json(lead);
+  res.status(201).json({ ...lead, labels: [] });
 });
 
 router.patch("/leads/:id", async (req, res): Promise<void> => {
@@ -139,7 +187,8 @@ router.patch("/leads/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Lead not found" });
     return;
   }
-  res.json(lead);
+  const [withLabels] = await attachLabels([lead]);
+  res.json(withLabels);
 });
 
 router.delete("/leads/:id", async (req, res): Promise<void> => {
@@ -169,7 +218,7 @@ router.get("/campaigns/:id/leads", async (req, res): Promise<void> => {
     .from(campaignLeadsTable)
     .innerJoin(leadsTable, eq(campaignLeadsTable.leadId, leadsTable.id))
     .where(eq(campaignLeadsTable.campaignId, params.data.id));
-  res.json(campaignLeads.map(r => r.lead));
+  res.json(await attachLabels(campaignLeads.map(r => r.lead)));
 });
 
 router.post("/campaigns/:id/leads", async (req, res): Promise<void> => {

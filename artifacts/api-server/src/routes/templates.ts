@@ -19,22 +19,23 @@ router.get("/templates/:id", async (req, res): Promise<void> => {
 
 // POST /api/templates
 router.post("/templates", async (req, res): Promise<void> => {
-  const { name, subject, body, bodyType } = req.body ?? {};
+  const { name, subject, previewText, body, bodyType } = req.body ?? {};
   if (!name || !subject || !body) {
     res.status(400).json({ error: { code: "INVALID_INPUT", message: "'name', 'subject', and 'body' are required" } });
     return;
   }
-  const [row] = await db.insert(emailTemplatesTable).values({ name, subject, body, bodyType: bodyType ?? "text" }).returning();
+  const [row] = await db.insert(emailTemplatesTable).values({ name, subject, previewText: previewText ?? null, body, bodyType: bodyType ?? "text" }).returning();
   res.status(201).json(row);
 });
 
 // PATCH /api/templates/:id
 router.patch("/templates/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const { name, subject, body, bodyType } = req.body ?? {};
+  const { name, subject, previewText, body, bodyType } = req.body ?? {};
   const update: Record<string, unknown> = { updatedAt: new Date() };
   if (name !== undefined) update.name = name;
   if (subject !== undefined) update.subject = subject;
+  if (previewText !== undefined) update.previewText = previewText;
   if (body !== undefined) update.body = body;
   if (bodyType !== undefined) update.bodyType = bodyType;
   const [row] = await db.update(emailTemplatesTable).set(update).where(eq(emailTemplatesTable.id, id)).returning();
