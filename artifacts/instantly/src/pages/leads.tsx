@@ -3,7 +3,9 @@ import {
   useListLeads, useCreateLead, useDeleteLead, useBulkImportLeads,
   useListLabels, useCreateLabel, useDeleteLabel, useSetLeadLabels,
   getListLeadsQueryKey, getListLabelsQueryKey,
+  type Lead,
 } from "@workspace/api-client-react";
+import { LeadDetailSheet } from "@/components/leads/lead-detail-sheet";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -70,6 +72,7 @@ export default function Leads() {
   const [newLeadLabels, setNewLeadLabels] = useState<number[]>([]);
   const [importLabels, setImportLabels] = useState<number[]>([]);
   const [manageLabelsOpen, setManageLabelsOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -302,11 +305,16 @@ export default function Leads() {
               const leadLabels: LabelLite[] = (lead.labels ?? []) as LabelLite[];
               const leadLabelIds = leadLabels.map(l => l.id);
               return (
-                <TableRow key={lead.id} data-testid={`row-lead-${lead.id ?? 0}`}>
+                <TableRow
+                  key={lead.id}
+                  data-testid={`row-lead-${lead.id ?? 0}`}
+                  className="cursor-pointer"
+                  onClick={() => setSelectedLead(lead as Lead)}
+                >
                   <TableCell className="font-medium">{lead.email}</TableCell>
                   <TableCell>{[lead.firstName, lead.lastName].filter(Boolean).join(" ") || "—"}</TableCell>
                   <TableCell>{lead.company || "—"}</TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap items-center gap-1">
                       {leadLabels.map(lbl => <LabelChip key={lbl.id} label={lbl} />)}
                       <Popover>
@@ -345,7 +353,7 @@ export default function Leads() {
                   <TableCell>
                     <Badge variant={(STATUS_COLORS[lead.status ?? "active"] ?? "secondary") as any}>{lead.status}</Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" data-testid={`button-lead-menu-${lead.id}`}>
@@ -641,6 +649,14 @@ export default function Leads() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Lead detail sheet */}
+      <LeadDetailSheet
+        lead={selectedLead}
+        labels={labels}
+        open={!!selectedLead}
+        onOpenChange={(v) => { if (!v) setSelectedLead(null); }}
+      />
     </div>
   );
 }

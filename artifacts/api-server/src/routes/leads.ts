@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray } from "drizzle-orm";
-import { db, leadsTable, campaignLeadsTable, campaignsTable, labelsTable, leadLabelsTable, type Lead, type Label } from "@workspace/db";
+import { db, leadsTable, campaignLeadsTable, campaignsTable, labelsTable, leadLabelsTable, emailSendJobsTable, sequenceStepsTable, type Lead, type Label } from "@workspace/db";
 import {
   CreateLeadBody,
   UpdateLeadBody,
@@ -204,6 +204,122 @@ router.delete("/leads/:id", async (req, res): Promise<void> => {
     return;
   }
   res.sendStatus(204);
+});
+
+// Per-lead activity: which campaigns they're in, where they are in the sequence,
+// and per-campaign engagement stats (sent / opened / clicked / replied / bounced).
+router.get("/leads/:id/activity", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const leadId = parseInt(raw, 10);
+  if (!Number.isFinite(leadId) || leadId <= 0) {
+    res.status(400).json({ error: "Invalid lead id" });
+    return;
+  }
+  const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, leadId));
+  if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
+
+  // All campaigns this lead is enrolled in.
+  const enrollments = await db
+    .select({ campaign: campaignsTable })
+    .from(campaignLeadsTable)
+    .innerJoin(campaignsTable, eq(campaignLeadsTable.campaignId, campaignsTable.id))
+    .where(eq(campaignLeadsTable.leadId, leadId));
+
+  const campaignIds = enrollments.map((e) => e.campaign.id);
+
+  const jobs = campaignIds.length > 0
+    ? await db
+        .select()
+        .from(emailSendJobsTable)
+        .where(and(eq(emailSendJobsTable.leadId, leadId), inArray(emailSendJobsTable.campaignId, campaignIds)))
+    : [];
+
+  const maxDate = (vals: Array<Date | string | null | undefined>): string | null => {
+    let best: number | null = null;
+    let bestRaw: Date | string | null = null;
+    for (const v of vals) {
+      if (!v) continue;
+      const t = v instanceof Date ? v.getTime() : new Date(v).getTime();
+      if (!Number.isFinite(t)) continue;
+      if (best === null || t > best) { best = t; bestRaw = v; }
+    }
+    if (bestRaw === null) return null;
+    return bestRaw instanceof Date ? bestRaw.toISOString() : new Date(bestRaw).toISOString();
+  };
+
+  const steps = campaignIds.length > 0
+    ? await db.select().from(sequenceStepsTable).where(inArray(sequenceStepsTable.campaignId, campaignIds))
+    : [];
+
+  const stepsByCampaign = new Map<number, typeof steps>();
+  for (const s of steps) {
+    const list = stepsByCampaign.get(s.campaignId) ?? [];
+    list.push(s);
+    stepsByCampaign.set(s.campaignId, list);
+  }
+  for (const [, list] of stepsByCampaign) list.sort((a, b) => a.stepNumber - b.stepNumber);
+
+  const isSent = (j: typeof jobs[number]) => j.status === "sent" || !!j.sentAt;
+
+  const activity = enrollments.map(({ campaign }) => {
+    const campaignJobs = jobs.filter((j) => j.campaignId === campaign.id);
+    const sent = campaignJobs.filter(isSent).length;
+    const opened = campaignJobs.filter((j) => j.openCount > 0).length;
+    const clicked = campaignJobs.filter((j) => j.clickCount > 0).length;
+    const replied = campaignJobs.filter((j) => j.repliedAt).length;
+    const bounced = campaignJobs.filter((j) => j.bounceKind).length;
+
+    const campaignSteps = stepsByCampaign.get(campaign.id) ?? [];
+    const totalSteps = campaignSteps.length;
+
+    // currentStep mirrors `sent` logic so they don't drift.
+    const sentStepIds = new Set(campaignJobs.filter(isSent).map((j) => j.stepId));
+    const sentStepNumbers = campaignSteps
+      .filter((s) => sentStepIds.has(s.id))
+      .map((s) => s.stepNumber);
+    const currentStep = sentStepNumbers.length > 0 ? Math.max(...sentStepNumbers) : 0;
+
+    // Next step = earliest upcoming pending/in_progress job (ASC by scheduledAt).
+    const pendingJob = campaignJobs
+      .filter((j) => j.status === "pending" || j.status === "in_progress")
+      .sort((a, b) => {
+        const at = a.scheduledAt ? new Date(a.scheduledAt).getTime() : Number.POSITIVE_INFINITY;
+        const bt = b.scheduledAt ? new Date(b.scheduledAt).getTime() : Number.POSITIVE_INFINITY;
+        return at - bt;
+      })[0];
+    const nextStep = pendingJob ? campaignSteps.find((s) => s.id === pendingJob.stepId) : null;
+
+    // Each last* is the MAX of its own timestamp field, not picked from a single ordering.
+    const lastSent = maxDate(campaignJobs.map((j) => j.sentAt));
+    const lastOpened = maxDate(campaignJobs.map((j) => j.firstOpenedAt));
+    const lastClicked = maxDate(campaignJobs.map((j) => j.firstClickedAt));
+    const lastReplied = maxDate(campaignJobs.map((j) => j.repliedAt));
+
+    return {
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      campaignStatus: campaign.status,
+      currentStep,
+      totalSteps,
+      nextStepNumber: nextStep?.stepNumber ?? null,
+      nextScheduledAt: pendingJob?.scheduledAt ?? null,
+      sent,
+      opened,
+      clicked,
+      replied,
+      bounced,
+      openRate: sent > 0 ? parseFloat(((opened / sent) * 100).toFixed(1)) : 0,
+      clickRate: sent > 0 ? parseFloat(((clicked / sent) * 100).toFixed(1)) : 0,
+      replyRate: sent > 0 ? parseFloat(((replied / sent) * 100).toFixed(1)) : 0,
+      bounceRate: sent > 0 ? parseFloat(((bounced / sent) * 100).toFixed(1)) : 0,
+      lastSentAt: lastSent,
+      lastOpenedAt: lastOpened,
+      lastClickedAt: lastClicked,
+      lastRepliedAt: lastReplied,
+    };
+  });
+
+  res.json({ leadId, campaigns: activity });
 });
 
 router.get("/campaigns/:id/leads", async (req, res): Promise<void> => {

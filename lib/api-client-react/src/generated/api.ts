@@ -44,6 +44,7 @@ import type {
   Label,
   LabelInput,
   Lead,
+  LeadActivity,
   LeadInput,
   LeadUpdate,
   LinkClickRow,
@@ -1993,6 +1994,83 @@ export const useDeleteLead = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDeleteLeadMutationOptions(options));
     }
+
+export const getGetLeadActivityUrl = (id: number,) => {
+
+
+
+
+  return `/api/leads/${id}/activity`
+}
+
+/**
+ * @summary Get campaign activity and per-campaign stats for a lead
+ */
+export const getLeadActivity = async (id: number, options?: RequestInit): Promise<LeadActivity> => {
+
+  return customFetch<LeadActivity>(getGetLeadActivityUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLeadActivityQueryKey = (id: number,) => {
+    return [
+    `/api/leads/${id}/activity`
+    ] as const;
+    }
+
+
+export const getGetLeadActivityQueryOptions = <TData = Awaited<ReturnType<typeof getLeadActivity>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLeadActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLeadActivityQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLeadActivity>>> = ({ signal }) => getLeadActivity(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLeadActivity>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLeadActivityQueryResult = NonNullable<Awaited<ReturnType<typeof getLeadActivity>>>
+export type GetLeadActivityQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get campaign activity and per-campaign stats for a lead
+ */
+
+export function useGetLeadActivity<TData = Awaited<ReturnType<typeof getLeadActivity>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLeadActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLeadActivityQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListCampaignLeadsUrl = (id: number,) => {
 

@@ -252,6 +252,51 @@ export interface LeadUpdate {
   status?: LeadUpdateStatus;
 }
 
+export type LeadCampaignActivityCampaignStatus = typeof LeadCampaignActivityCampaignStatus[keyof typeof LeadCampaignActivityCampaignStatus];
+
+
+export const LeadCampaignActivityCampaignStatus = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+  completed: 'completed',
+} as const;
+
+export interface LeadCampaignActivity {
+  campaignId: number;
+  campaignName: string;
+  campaignStatus: LeadCampaignActivityCampaignStatus;
+  /** Highest step number already sent (0 if nothing sent yet) */
+  currentStep: number;
+  totalSteps: number;
+  /** @nullable */
+  nextStepNumber?: number | null;
+  /** @nullable */
+  nextScheduledAt?: string | null;
+  sent: number;
+  opened: number;
+  clicked: number;
+  replied: number;
+  bounced: number;
+  openRate: number;
+  clickRate: number;
+  replyRate: number;
+  bounceRate: number;
+  /** @nullable */
+  lastSentAt?: string | null;
+  /** @nullable */
+  lastOpenedAt?: string | null;
+  /** @nullable */
+  lastClickedAt?: string | null;
+  /** @nullable */
+  lastRepliedAt?: string | null;
+}
+
+export interface LeadActivity {
+  leadId: number;
+  campaigns: LeadCampaignActivity[];
+}
+
 /**
  * Provide either `leads` (array) or `csvText` (string). At least one must be present.
  */

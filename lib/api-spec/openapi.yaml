@@ -542,6 +542,25 @@ paths:
         "204":
           description: Deleted
 
+  /leads/{id}/activity:
+    get:
+      operationId: getLeadActivity
+      tags: [leads]
+      summary: Get campaign activity and per-campaign stats for a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Per-campaign activity for the lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadActivity"
+
   /campaigns/{id}/leads:
     get:
       operationId: listCampaignLeads
@@ -1214,6 +1233,64 @@ components:
         status:
           type: string
           enum: [active, unsubscribed, bounced, replied]
+
+    LeadActivity:
+      type: object
+      required: [leadId, campaigns]
+      properties:
+        leadId:
+          type: integer
+        campaigns:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeadCampaignActivity"
+
+    LeadCampaignActivity:
+      type: object
+      required: [campaignId, campaignName, campaignStatus, currentStep, totalSteps, sent, opened, clicked, replied, bounced, openRate, clickRate, replyRate, bounceRate]
+      properties:
+        campaignId:
+          type: integer
+        campaignName:
+          type: string
+        campaignStatus:
+          type: string
+          enum: [draft, active, paused, completed]
+        currentStep:
+          type: integer
+          description: Highest step number already sent (0 if nothing sent yet)
+        totalSteps:
+          type: integer
+        nextStepNumber:
+          type: ["integer", "null"]
+        nextScheduledAt:
+          type: ["string", "null"]
+        sent:
+          type: integer
+        opened:
+          type: integer
+        clicked:
+          type: integer
+        replied:
+          type: integer
+        bounced:
+          type: integer
+        openRate:
+          type: number
+        clickRate:
+          type: number
+        replyRate:
+          type: number
+        bounceRate:
+          type: number
+        lastSentAt:
+          type: ["string", "null"]
+        lastOpenedAt:
+          type: ["string", "null"]
+        lastClickedAt:
+          type: ["string", "null"]
+        lastRepliedAt:
+          type: ["string", "null"]
 
     BulkLeadImport:
       type: object

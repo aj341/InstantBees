@@ -533,6 +533,40 @@ export const DeleteLeadParams = zod.object({
 
 
 /**
+ * @summary Get campaign activity and per-campaign stats for a lead
+ */
+export const GetLeadActivityParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetLeadActivityResponse = zod.object({
+  "leadId": zod.number(),
+  "campaigns": zod.array(zod.object({
+  "campaignId": zod.number(),
+  "campaignName": zod.string(),
+  "campaignStatus": zod.enum(['draft', 'active', 'paused', 'completed']),
+  "currentStep": zod.number().describe('Highest step number already sent (0 if nothing sent yet)'),
+  "totalSteps": zod.number(),
+  "nextStepNumber": zod.number().nullish(),
+  "nextScheduledAt": zod.string().nullish(),
+  "sent": zod.number(),
+  "opened": zod.number(),
+  "clicked": zod.number(),
+  "replied": zod.number(),
+  "bounced": zod.number(),
+  "openRate": zod.number(),
+  "clickRate": zod.number(),
+  "replyRate": zod.number(),
+  "bounceRate": zod.number(),
+  "lastSentAt": zod.string().nullish(),
+  "lastOpenedAt": zod.string().nullish(),
+  "lastClickedAt": zod.string().nullish(),
+  "lastRepliedAt": zod.string().nullish()
+}))
+})
+
+
+/**
  * @summary List leads for a campaign
  */
 export const ListCampaignLeadsParams = zod.object({
