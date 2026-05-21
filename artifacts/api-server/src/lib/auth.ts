@@ -82,12 +82,15 @@ export function buildSessionMiddleware(): RequestHandler {
  *  - v1 API key endpoints (already protected by their own API key middleware)
  */
 // Paths are evaluated relative to the /api mount point.
+// MCP and v1 endpoints have their own API-key auth (see middleware/api-auth.ts) and need
+// to stay reachable for Claude / external integrations even when no user session exists.
 const PUBLIC_PATH_PREFIXES = [
   "/auth/",
   "/track/",
   "/unsubscribe/",
   "/healthz",
   "/v1/",
+  "/mcp/",
 ];
 
 export const requireAuth: RequestHandler = (req, res, next) => {
