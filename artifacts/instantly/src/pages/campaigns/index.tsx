@@ -43,6 +43,7 @@ export default function CampaignsList() {
               <TableHead>Status</TableHead>
               <TableHead>Sent</TableHead>
               <TableHead>Opens</TableHead>
+              <TableHead>Clicks</TableHead>
               <TableHead>Replies</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -62,6 +63,7 @@ export default function CampaignsList() {
                 </TableCell>
                 <TableCell>{campaign.sentCount || 0}</TableCell>
                 <TableCell>{campaign.openCount || 0}</TableCell>
+                <TableCell>{campaign.clickCount || 0}</TableCell>
                 <TableCell>{campaign.replyCount || 0}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
@@ -89,7 +91,7 @@ export default function CampaignsList() {
             ))}
             {campaigns?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   No campaigns found. Create one to get started.
                 </TableCell>
               </TableRow>

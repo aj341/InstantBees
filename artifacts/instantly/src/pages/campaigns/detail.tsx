@@ -52,7 +52,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type, FileText, Send, Braces } from "lucide-react";
+import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type, FileText, Send, Braces, MousePointerClick, Clock } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/email-editor/rich-text-editor";
@@ -350,10 +350,11 @@ export default function CampaignDetail() {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4 mt-4">
-          <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+          <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
             {[
               { label: "Sent", value: campaign.sentCount, icon: Mail },
               { label: "Open Rate", value: `${analytics?.openRate ?? 0}%`, icon: TrendingUp },
+              { label: "Click Rate", value: `${analytics?.clickRate ?? 0}%`, icon: MousePointerClick, sub: `${campaign.clickCount ?? 0} clicks` },
               { label: "Reply Rate", value: `${analytics?.replyRate ?? 0}%`, icon: MessageSquare },
               { label: "Leads", value: campaign.leadsCount, icon: Users },
             ].map(stat => (
@@ -363,7 +364,10 @@ export default function CampaignDetail() {
                   <stat.icon className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold" data-testid={`stat-${stat.label.toLowerCase()}`}>{stat.value}</div>
+                  <div className="text-2xl font-bold" data-testid={`stat-${stat.label.toLowerCase().replace(/\s+/g, "-")}`}>{stat.value}</div>
+                  {"sub" in stat && stat.sub && (
+                    <div className="text-xs text-muted-foreground mt-0.5">{stat.sub}</div>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -427,46 +431,65 @@ export default function CampaignDetail() {
               <p className="text-sm">No sequence steps yet. Add your first email step.</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {steps?.map((step, idx) => (
-                <Card key={step.id} data-testid={`card-step-${step.id}`}>
-                  <CardContent className="pt-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
-                          {idx + 1}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium truncate">{step.subject}</p>
-                            {step.bodyType === "html" && (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">HTML</Badge>
-                            )}
+                <div key={step.id}>
+                  {idx > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => openEdit({ ...step, bodyType: (step.bodyType ?? "text") as "text" | "html" })}
+                      className="group mx-auto my-1 flex items-center gap-2 rounded-full border border-dashed border-border bg-muted/30 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/5 hover:text-foreground"
+                      data-testid={`delay-step-${step.id}`}
+                      title="Click to edit delay"
+                    >
+                      <Clock className="h-3 w-3" />
+                      <span>
+                        Wait <span className="font-medium text-foreground">{step.delayDays}</span> day{step.delayDays !== 1 ? "s" : ""}
+                      </span>
+                      <Pencil className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
+                    </button>
+                  )}
+                  <Card data-testid={`card-step-${step.id}`}>
+                    <CardContent className="pt-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                            {idx + 1}
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {idx === 0 ? "Day 0 (initial)" : `+${step.delayDays} day${step.delayDays !== 1 ? "s" : ""} after previous step`}
-                          </p>
-                          <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                            {step.bodyType === "html"
-                              ? step.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
-                              : step.body}
-                          </p>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium truncate">{step.subject}</p>
+                              {step.bodyType === "html" && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">HTML</Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {idx === 0
+                                ? "Day 0 — sent when campaign launches"
+                                : `Sent ${step.delayDays} day${step.delayDays !== 1 ? "s" : ""} after step ${idx}`}
+                            </p>
+                            <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                              {step.bodyType === "html"
+                                ? step.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+                                : step.body}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <Button variant="ghost" size="icon" onClick={() => openTestDialog({ id: step.id, subject: step.subject })} title="Send test to me" data-testid={`button-test-step-${step.id}`}>
+                            <Send className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => openEdit({ ...step, bodyType: (step.bodyType ?? "text") as "text" | "html" })} data-testid={`button-edit-step-${step.id}`}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => deleteSeq.mutate({ id, stepId: step.id })} data-testid={`button-delete-step-${step.id}`}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex gap-1 shrink-0">
-                        <Button variant="ghost" size="icon" onClick={() => openTestDialog({ id: step.id, subject: step.subject })} title="Send test to me" data-testid={`button-test-step-${step.id}`}>
-                          <Send className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => openEdit({ ...step, bodyType: (step.bodyType ?? "text") as "text" | "html" })} data-testid={`button-edit-step-${step.id}`}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => deleteSeq.mutate({ id, stepId: step.id })} data-testid={`button-delete-step-${step.id}`}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </div>
               ))}
             </div>
           )}
