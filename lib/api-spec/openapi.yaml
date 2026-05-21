@@ -3,13 +3,26 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Instantly.ai clone API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: campaigns
+    description: Campaign management
+  - name: leads
+    description: Lead management
+  - name: accounts
+    description: Email account management
+  - name: sequences
+    description: Email sequence/step management
+  - name: inbox
+    description: Unified inbox
+  - name: analytics
+    description: Analytics and reporting
+
 paths:
   /healthz:
     get:
@@ -24,6 +37,564 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Campaigns ────────────────────────────────────────────────────────────────
+
+  /campaigns:
+    get:
+      operationId: listCampaigns
+      tags: [campaigns]
+      summary: List campaigns
+      responses:
+        "200":
+          description: List of campaigns
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Campaign"
+    post:
+      operationId: createCampaign
+      tags: [campaigns]
+      summary: Create a campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/stats:
+    get:
+      operationId: getCampaignStats
+      tags: [campaigns]
+      summary: Get aggregated stats for all campaigns
+      responses:
+        "200":
+          description: Campaign stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignStatsOverview"
+
+  /campaigns/{id}:
+    get:
+      operationId: getCampaign
+      tags: [campaigns]
+      summary: Get a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateCampaign
+      tags: [campaigns]
+      summary: Update a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignUpdate"
+      responses:
+        "200":
+          description: Updated campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+    delete:
+      operationId: deleteCampaign
+      tags: [campaigns]
+      summary: Delete a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /campaigns/{id}/launch:
+    post:
+      operationId: launchCampaign
+      tags: [campaigns]
+      summary: Launch / resume a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaign launched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/{id}/pause:
+    post:
+      operationId: pauseCampaign
+      tags: [campaigns]
+      summary: Pause a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaign paused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/{id}/analytics:
+    get:
+      operationId: getCampaignAnalytics
+      tags: [campaigns]
+      summary: Get analytics for a specific campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaign analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignAnalytics"
+
+  # ── Sequence Steps ────────────────────────────────────────────────────────────
+
+  /campaigns/{id}/sequences:
+    get:
+      operationId: listSequences
+      tags: [sequences]
+      summary: List sequence steps for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sequence steps
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SequenceStep"
+    post:
+      operationId: createSequence
+      tags: [sequences]
+      summary: Add a sequence step to a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SequenceStepInput"
+      responses:
+        "201":
+          description: Created step
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SequenceStep"
+
+  /campaigns/{id}/sequences/{stepId}:
+    patch:
+      operationId: updateSequence
+      tags: [sequences]
+      summary: Update a sequence step
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: stepId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SequenceStepUpdate"
+      responses:
+        "200":
+          description: Updated step
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SequenceStep"
+    delete:
+      operationId: deleteSequence
+      tags: [sequences]
+      summary: Delete a sequence step
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: stepId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Leads ─────────────────────────────────────────────────────────────────────
+
+  /leads:
+    get:
+      operationId: listLeads
+      tags: [leads]
+      summary: List all leads
+      responses:
+        "200":
+          description: Leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lead"
+    post:
+      operationId: createLead
+      tags: [leads]
+      summary: Create a lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+
+  /leads/{id}:
+    patch:
+      operationId: updateLead
+      tags: [leads]
+      summary: Update a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadUpdate"
+      responses:
+        "200":
+          description: Updated lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+    delete:
+      operationId: deleteLead
+      tags: [leads]
+      summary: Delete a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /campaigns/{id}/leads:
+    get:
+      operationId: listCampaignLeads
+      tags: [leads]
+      summary: List leads for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaign leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lead"
+    post:
+      operationId: addLeadsToCampaign
+      tags: [leads]
+      summary: Add leads to a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignLeadsInput"
+      responses:
+        "200":
+          description: Leads added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  added:
+                    type: integer
+                required:
+                  - added
+
+  /campaigns/{id}/leads/{leadId}:
+    delete:
+      operationId: removeLeadFromCampaign
+      tags: [leads]
+      summary: Remove a lead from a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: leadId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+
+  # ── Email Accounts ────────────────────────────────────────────────────────────
+
+  /accounts:
+    get:
+      operationId: listAccounts
+      tags: [accounts]
+      summary: List email accounts
+      responses:
+        "200":
+          description: Accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmailAccount"
+    post:
+      operationId: createAccount
+      tags: [accounts]
+      summary: Add an email account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailAccountInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailAccount"
+
+  /accounts/{id}:
+    patch:
+      operationId: updateAccount
+      tags: [accounts]
+      summary: Update an email account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailAccountUpdate"
+      responses:
+        "200":
+          description: Updated account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailAccount"
+    delete:
+      operationId: deleteAccount
+      tags: [accounts]
+      summary: Delete an email account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Inbox ─────────────────────────────────────────────────────────────────────
+
+  /inbox:
+    get:
+      operationId: listInboxMessages
+      tags: [inbox]
+      summary: List inbox messages (replies)
+      responses:
+        "200":
+          description: Inbox messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InboxMessage"
+
+  /inbox/{id}:
+    get:
+      operationId: getInboxMessage
+      tags: [inbox]
+      summary: Get an inbox message
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Inbox message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxMessage"
+    patch:
+      operationId: updateInboxMessage
+      tags: [inbox]
+      summary: Update inbox message (mark read, archive, etc.)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InboxMessageUpdate"
+      responses:
+        "200":
+          description: Updated message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxMessage"
+
+  # ── Analytics ─────────────────────────────────────────────────────────────────
+
+  /analytics/summary:
+    get:
+      operationId: getAnalyticsSummary
+      tags: [analytics]
+      summary: Get global analytics summary
+      responses:
+        "200":
+          description: Analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsSummary"
+
+  /analytics/daily:
+    get:
+      operationId: getDailyAnalytics
+      tags: [analytics]
+      summary: Get daily email activity for the last 30 days
+      responses:
+        "200":
+          description: Daily analytics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +605,380 @@ components:
       required:
         - status
 
+    # ── Campaign ──────────────────────────────────────────────────────────────
+
+    Campaign:
+      type: object
+      required: [id, name, status, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        status:
+          type: string
+          enum: [draft, active, paused, completed]
+        fromName:
+          type: ["string", "null"]
+        replyTo:
+          type: ["string", "null"]
+        dailyLimit:
+          type: ["integer", "null"]
+        trackOpens:
+          type: boolean
+        trackClicks:
+          type: boolean
+        leadsCount:
+          type: integer
+        sentCount:
+          type: integer
+        openCount:
+          type: integer
+        replyCount:
+          type: integer
+        bounceCount:
+          type: integer
+        createdAt:
+          type: string
+
+    CampaignInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        fromName:
+          type: string
+        replyTo:
+          type: string
+        dailyLimit:
+          type: integer
+        trackOpens:
+          type: boolean
+        trackClicks:
+          type: boolean
+
+    CampaignUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        fromName:
+          type: string
+        replyTo:
+          type: string
+        dailyLimit:
+          type: integer
+        trackOpens:
+          type: boolean
+        trackClicks:
+          type: boolean
+
+    CampaignStatsOverview:
+      type: object
+      required: [totalCampaigns, activeCampaigns, totalLeads, totalSent, avgOpenRate, avgReplyRate]
+      properties:
+        totalCampaigns:
+          type: integer
+        activeCampaigns:
+          type: integer
+        totalLeads:
+          type: integer
+        totalSent:
+          type: integer
+        avgOpenRate:
+          type: number
+        avgReplyRate:
+          type: number
+        totalReplies:
+          type: integer
+        totalBounces:
+          type: integer
+
+    CampaignAnalytics:
+      type: object
+      required: [campaignId, sent, opened, clicked, replied, bounced, openRate, clickRate, replyRate, bounceRate]
+      properties:
+        campaignId:
+          type: integer
+        sent:
+          type: integer
+        opened:
+          type: integer
+        clicked:
+          type: integer
+        replied:
+          type: integer
+        bounced:
+          type: integer
+        openRate:
+          type: number
+        clickRate:
+          type: number
+        replyRate:
+          type: number
+        bounceRate:
+          type: number
+
+    # ── Sequence Step ─────────────────────────────────────────────────────────
+
+    SequenceStep:
+      type: object
+      required: [id, campaignId, stepNumber, subject, body, delayDays, createdAt]
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        stepNumber:
+          type: integer
+        subject:
+          type: string
+        body:
+          type: string
+        delayDays:
+          type: integer
+        createdAt:
+          type: string
+
+    SequenceStepInput:
+      type: object
+      required: [subject, body, delayDays]
+      properties:
+        subject:
+          type: string
+        body:
+          type: string
+        delayDays:
+          type: integer
+
+    SequenceStepUpdate:
+      type: object
+      properties:
+        subject:
+          type: string
+        body:
+          type: string
+        delayDays:
+          type: integer
+
+    # ── Lead ──────────────────────────────────────────────────────────────────
+
+    Lead:
+      type: object
+      required: [id, email, createdAt]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        firstName:
+          type: ["string", "null"]
+        lastName:
+          type: ["string", "null"]
+        company:
+          type: ["string", "null"]
+        title:
+          type: ["string", "null"]
+        website:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, unsubscribed, bounced, replied]
+        createdAt:
+          type: string
+
+    LeadInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        company:
+          type: string
+        title:
+          type: string
+        website:
+          type: string
+        phone:
+          type: string
+
+    LeadUpdate:
+      type: object
+      properties:
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        company:
+          type: string
+        title:
+          type: string
+        website:
+          type: string
+        phone:
+          type: string
+        status:
+          type: string
+          enum: [active, unsubscribed, bounced, replied]
+
+    CampaignLeadsInput:
+      type: object
+      required: [leadIds]
+      properties:
+        leadIds:
+          type: array
+          items:
+            type: integer
+
+    # ── Email Account ─────────────────────────────────────────────────────────
+
+    EmailAccount:
+      type: object
+      required: [id, email, provider, status, warmupEnabled, dailySendLimit, createdAt]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: ["string", "null"]
+        provider:
+          type: string
+          enum: [gmail, outlook, smtp]
+        status:
+          type: string
+          enum: [connected, disconnected, error, warming]
+        warmupEnabled:
+          type: boolean
+        dailySendLimit:
+          type: integer
+        sentToday:
+          type: integer
+        healthScore:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+
+    EmailAccountInput:
+      type: object
+      required: [email, provider]
+      properties:
+        email:
+          type: string
+        name:
+          type: string
+        provider:
+          type: string
+          enum: [gmail, outlook, smtp]
+        warmupEnabled:
+          type: boolean
+        dailySendLimit:
+          type: integer
+
+    EmailAccountUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        warmupEnabled:
+          type: boolean
+        dailySendLimit:
+          type: integer
+        status:
+          type: string
+          enum: [connected, disconnected, error, warming]
+
+    # ── Inbox ─────────────────────────────────────────────────────────────────
+
+    InboxMessage:
+      type: object
+      required: [id, fromEmail, subject, body, isRead, isArchived, campaignId, leadId, receivedAt]
+      properties:
+        id:
+          type: integer
+        fromEmail:
+          type: string
+        fromName:
+          type: ["string", "null"]
+        subject:
+          type: string
+        body:
+          type: string
+        isRead:
+          type: boolean
+        isArchived:
+          type: boolean
+        isFavorite:
+          type: boolean
+        sentiment:
+          type: ["string", "null"]
+          enum: ["positive", "neutral", "negative", null]
+        campaignId:
+          type: ["integer", "null"]
+        leadId:
+          type: ["integer", "null"]
+        receivedAt:
+          type: string
+
+    InboxMessageUpdate:
+      type: object
+      properties:
+        isRead:
+          type: boolean
+        isArchived:
+          type: boolean
+        isFavorite:
+          type: boolean
+
+    # ── Analytics ─────────────────────────────────────────────────────────────
+
+    AnalyticsSummary:
+      type: object
+      required: [totalSent, totalOpened, totalClicked, totalReplied, totalBounced, openRate, clickRate, replyRate, bounceRate, activeAccounts, activeCampaigns]
+      properties:
+        totalSent:
+          type: integer
+        totalOpened:
+          type: integer
+        totalClicked:
+          type: integer
+        totalReplied:
+          type: integer
+        totalBounced:
+          type: integer
+        openRate:
+          type: number
+        clickRate:
+          type: number
+        replyRate:
+          type: number
+        bounceRate:
+          type: number
+        activeAccounts:
+          type: integer
+        activeCampaigns:
+          type: integer
+
+    DailyStats:
+      type: object
+      required: [date, sent, opened, replied, bounced]
+      properties:
+        date:
+          type: string
+        sent:
+          type: integer
+        opened:
+          type: integer
+        replied:
+          type: integer
+        bounced:
+          type: integer

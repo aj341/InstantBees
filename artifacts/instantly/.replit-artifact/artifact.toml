@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Instantly - Cold Email Outreach"
+version = "1.0.0"
+id = "artifacts/instantly"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25591
+
+[services.development]
+run = "pnpm --filter @workspace/instantly run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/instantly", "run", "build" ]
+publicDir = "artifacts/instantly/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25591"
+BASE_PATH = "/"
