@@ -90,6 +90,14 @@ export interface CampaignUpdate {
   scheduledStartAt?: string | null;
 }
 
+export interface LinkClickRow {
+  url: string;
+  totalClicks: number;
+  uniqueClicks: number;
+  /** @nullable */
+  lastClickedAt: string | null;
+}
+
 export interface CampaignStatsOverview {
   totalCampaigns: number;
   activeCampaigns: number;

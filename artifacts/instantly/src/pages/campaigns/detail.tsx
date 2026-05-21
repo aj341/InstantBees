@@ -3,6 +3,8 @@ import { useParams, useLocation } from "wouter";
 import {
   useGetCampaign,
   useGetCampaignAnalytics,
+  useGetCampaignLinkClicks,
+  getGetCampaignLinkClicksQueryKey,
   useListSequences,
   useListCampaignLeads,
   useListLeads,
@@ -56,6 +58,7 @@ import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingU
 import { Link } from "wouter";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/email-editor/rich-text-editor";
+import { EmailPreview } from "@/components/email-editor/email-preview";
 
 const seqSchema = z.object({
   subject: z.string().min(1, "Subject required"),
@@ -134,6 +137,7 @@ export default function CampaignDetail() {
 
   const { data: campaign, isLoading } = useGetCampaign(id, { query: { enabled: !!id, queryKey: getGetCampaignQueryKey(id) } });
   const { data: analytics } = useGetCampaignAnalytics(id, { query: { enabled: !!id, queryKey: getGetCampaignAnalyticsQueryKey(id) } });
+  const { data: linkClicks } = useGetCampaignLinkClicks(id, { query: { enabled: !!id, queryKey: getGetCampaignLinkClicksQueryKey(id) } });
   const { data: steps } = useListSequences(id, { query: { enabled: !!id, queryKey: getListSequencesQueryKey(id) } });
   const { data: campaignLeads } = useListCampaignLeads(id, { query: { enabled: !!id, queryKey: getListCampaignLeadsQueryKey(id) } });
   const { data: allLeads } = useListLeads();
@@ -351,6 +355,7 @@ export default function CampaignDetail() {
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="sequence" data-testid="tab-sequence">Sequence ({steps?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="leads" data-testid="tab-leads">Leads ({campaign.leadsCount})</TabsTrigger>
+          <TabsTrigger value="links" data-testid="tab-links">Links</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -543,6 +548,52 @@ export default function CampaignDetail() {
             </Table>
           </div>
         </TabsContent>
+
+        {/* Links Tab */}
+        <TabsContent value="links" className="mt-4 space-y-4">
+          {!linkClicks || linkClicks.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+              <MousePointerClick className="h-8 w-8 opacity-30" />
+              <p className="text-sm">No link clicks recorded yet for this campaign.</p>
+              <p className="text-xs">Once recipients click a tracked link in your emails, it'll show up here.</p>
+            </div>
+          ) : (
+            <div className="rounded-md border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Link</TableHead>
+                    <TableHead className="text-right w-32">Total Clicks</TableHead>
+                    <TableHead className="text-right w-32">Unique Clicks</TableHead>
+                    <TableHead className="text-right w-48">Last Clicked</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {linkClicks.map((row, i) => (
+                    <TableRow key={`${row.url}-${i}`} data-testid={`row-link-click-${i}`}>
+                      <TableCell className="max-w-md">
+                        <a
+                          href={row.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-cyan-400 hover:underline break-all"
+                          data-testid={`link-url-${i}`}
+                        >
+                          {row.url}
+                        </a>
+                      </TableCell>
+                      <TableCell className="text-right font-medium" data-testid={`text-total-clicks-${i}`}>{row.totalClicks}</TableCell>
+                      <TableCell className="text-right" data-testid={`text-unique-clicks-${i}`}>{row.uniqueClicks}</TableCell>
+                      <TableCell className="text-right text-sm text-muted-foreground">
+                        {row.lastClickedAt ? new Date(row.lastClickedAt).toLocaleString() : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
 
       {/* Template picker dialog */}
@@ -680,6 +731,16 @@ export default function CampaignDetail() {
                   <FormMessage />
                 </FormItem>
               )} />
+
+              {(seqForm.watch("body") || "").trim().length > 0 && (
+                <div className="pt-2">
+                  <EmailPreview
+                    body={seqForm.watch("body") || ""}
+                    bodyType={editorMode === "text" ? "text" : "html"}
+                    subject={seqForm.watch("subject") || undefined}
+                  />
+                </div>
+              )}
 
               <FormField control={seqForm.control} name="delayDays" render={({ field }) => (
                 <FormItem>

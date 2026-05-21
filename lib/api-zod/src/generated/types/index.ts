@@ -40,6 +40,7 @@ export * from './leadInput';
 export * from './leadStatus';
 export * from './leadUpdate';
 export * from './leadUpdateStatus';
+export * from './linkClickRow';
 export * from './resetRequest';
 export * from './resetRequestConfirm';
 export * from './resetResult';

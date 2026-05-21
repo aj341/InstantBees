@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, sql, isNull } from "drizzle-orm";
-import { db, emailSendJobsTable, campaignsTable, leadsTable, unsubscribesTable } from "@workspace/db";
+import { db, emailSendJobsTable, campaignsTable, leadsTable, unsubscribesTable, clickEventsTable } from "@workspace/db";
 import { verifyClickSignature } from "../lib/mailer";
 
 const router: IRouter = Router();
@@ -84,6 +84,14 @@ router.get("/track/click/:token", async (req, res): Promise<void> => {
   res.redirect(302, parsedTarget.toString());
 
   try {
+    // Log the per-link click so we can show a URL-level breakdown on the campaign page.
+    await db.insert(clickEventsTable).values({
+      sendJobId: job.id,
+      campaignId: job.campaignId,
+      leadId: job.leadId,
+      url: parsedTarget.toString(),
+    });
+
     // Atomic first-click: row update only succeeds if firstClickedAt was NULL.
     const firstClickSet = await db
       .update(emailSendJobsTable)

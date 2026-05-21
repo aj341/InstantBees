@@ -201,6 +201,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/CampaignAnalytics"
 
+  /campaigns/{id}/link-clicks:
+    get:
+      operationId: getCampaignLinkClicks
+      tags: [campaigns]
+      summary: Per-link click breakdown for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of links with their click counts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LinkClickRow"
+
   # ── Sequence Steps ────────────────────────────────────────────────────────────
 
   /campaigns/{id}/sequences:
@@ -899,6 +920,20 @@ components:
         includeUnsubscribe:
           type: boolean
         scheduledStartAt:
+          type: ["string", "null"]
+          format: date-time
+
+    LinkClickRow:
+      type: object
+      required: [url, totalClicks, uniqueClicks, lastClickedAt]
+      properties:
+        url:
+          type: string
+        totalClicks:
+          type: integer
+        uniqueClicks:
+          type: integer
+        lastClickedAt:
           type: ["string", "null"]
           format: date-time
 

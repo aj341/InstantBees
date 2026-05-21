@@ -225,6 +225,22 @@ export const GetCampaignAnalyticsResponse = zod.object({
 
 
 /**
+ * @summary Per-link click breakdown for a campaign
+ */
+export const GetCampaignLinkClicksParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignLinkClicksResponseItem = zod.object({
+  "url": zod.string(),
+  "totalClicks": zod.number(),
+  "uniqueClicks": zod.number(),
+  "lastClickedAt": zod.coerce.date().nullable()
+})
+export const GetCampaignLinkClicksResponse = zod.array(GetCampaignLinkClicksResponseItem)
+
+
+/**
  * @summary List sequence steps for a campaign
  */
 export const ListSequencesParams = zod.object({

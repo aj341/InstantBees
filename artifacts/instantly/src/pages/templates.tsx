@@ -20,6 +20,7 @@ import { z } from "zod";
 import { Plus, Pencil, Trash2, FileText, Code2, Type, Braces } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/email-editor/rich-text-editor";
+import { EmailPreview } from "@/components/email-editor/email-preview";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -279,6 +280,25 @@ export default function Templates() {
                   <FormMessage />
                 </FormItem>
               )} />
+
+              {editorMode !== "text" && (
+                <div className="pt-2">
+                  <EmailPreview
+                    body={form.watch("body") || ""}
+                    bodyType="html"
+                    subject={form.watch("subject") || undefined}
+                  />
+                </div>
+              )}
+              {editorMode === "text" && (form.watch("body") || "").trim().length > 0 && (
+                <div className="pt-2">
+                  <EmailPreview
+                    body={form.watch("body") || ""}
+                    bodyType="text"
+                    subject={form.watch("subject") || undefined}
+                  />
+                </div>
+              )}
 
               </div>
               <DialogFooter className="shrink-0 pt-4 border-t border-border mt-2">

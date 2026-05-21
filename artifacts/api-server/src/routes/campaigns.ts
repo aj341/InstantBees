@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, and, asc } from "drizzle-orm";
-import { db, campaignsTable, campaignLeadsTable, sequenceStepsTable, dailyStatsTable, leadsTable, emailAccountsTable, emailSendJobsTable, unsubscribesTable, inboxMessagesTable } from "@workspace/db";
+import { db, campaignsTable, campaignLeadsTable, sequenceStepsTable, dailyStatsTable, leadsTable, emailAccountsTable, emailSendJobsTable, unsubscribesTable, inboxMessagesTable, clickEventsTable } from "@workspace/db";
 import {
   CreateCampaignBody,
   UpdateCampaignBody,
@@ -231,6 +231,34 @@ router.post("/campaigns/:id/pause", async (req, res): Promise<void> => {
     return;
   }
   res.json(campaign);
+});
+
+router.get("/campaigns/:id/link-clicks", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const cid = parseInt(raw, 10);
+  if (!Number.isFinite(cid)) {
+    res.status(400).json({ error: "Invalid campaign id" });
+    return;
+  }
+  const rows = await db
+    .select({
+      url: clickEventsTable.url,
+      totalClicks: sql<number>`count(*)::int`,
+      uniqueClicks: sql<number>`count(distinct ${clickEventsTable.leadId})::int`,
+      lastClickedAt: sql<Date>`max(${clickEventsTable.clickedAt})`,
+    })
+    .from(clickEventsTable)
+    .where(eq(clickEventsTable.campaignId, cid))
+    .groupBy(clickEventsTable.url)
+    .orderBy(sql`count(*) desc`);
+  res.json(
+    rows.map((r) => ({
+      url: r.url,
+      totalClicks: r.totalClicks,
+      uniqueClicks: r.uniqueClicks,
+      lastClickedAt: r.lastClickedAt ? new Date(r.lastClickedAt).toISOString() : null,
+    })),
+  );
 });
 
 router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
