@@ -10,3 +10,4 @@ export * from "./send-jobs";
 export * from "./unsubscribes";
 export * from "./click-events";
 export * from "./labels";
+export * from "./user-sessions";
