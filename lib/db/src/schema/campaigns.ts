@@ -20,6 +20,7 @@ export const campaignsTable = pgTable("campaigns", {
   clickCount: integer("click_count").notNull().default(0),
   replyCount: integer("reply_count").notNull().default(0),
   bounceCount: integer("bounce_count").notNull().default(0),
+  scheduledStartAt: timestamp("scheduled_start_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

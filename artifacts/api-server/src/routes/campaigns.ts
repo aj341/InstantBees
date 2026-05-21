@@ -47,7 +47,12 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [campaign] = await db.insert(campaignsTable).values(parsed.data).returning();
+  const { scheduledStartAt, ...rest } = parsed.data as typeof parsed.data & { scheduledStartAt?: string | null };
+  const values = {
+    ...rest,
+    ...(scheduledStartAt ? { scheduledStartAt: new Date(scheduledStartAt) } : {}),
+  };
+  const [campaign] = await db.insert(campaignsTable).values(values).returning();
   res.status(201).json(campaign);
 });
 
@@ -78,7 +83,14 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [campaign] = await db.update(campaignsTable).set(parsed.data).where(eq(campaignsTable.id, params.data.id)).returning();
+  const { scheduledStartAt, ...rest } = parsed.data as typeof parsed.data & { scheduledStartAt?: string | null };
+  const updateValues = {
+    ...rest,
+    ...(scheduledStartAt !== undefined
+      ? { scheduledStartAt: scheduledStartAt === null ? null : new Date(scheduledStartAt) }
+      : {}),
+  };
+  const [campaign] = await db.update(campaignsTable).set(updateValues).where(eq(campaignsTable.id, params.data.id)).returning();
   if (!campaign) {
     res.status(404).json({ error: "Campaign not found" });
     return;
@@ -168,7 +180,12 @@ router.post("/campaigns/:id/launch", async (req, res): Promise<void> => {
       .map((j) => `${j.leadId}:${j.stepId}`),
   );
 
-  const now = Date.now();
+  // If the campaign has a future scheduledStartAt, use that as the base time
+  // for every queued job. The worker only sends jobs where scheduledAt <= now
+  // AND campaign.status === "active", so jobs sit dormant until that moment.
+  const wallNow = Date.now();
+  const scheduledStart = existing.scheduledStartAt ? existing.scheduledStartAt.getTime() : 0;
+  const now = scheduledStart > wallNow ? scheduledStart : wallNow;
   const jobs: Array<typeof emailSendJobsTable.$inferInsert> = [];
   let acctIdx = 0;
   for (const lead of leads) {

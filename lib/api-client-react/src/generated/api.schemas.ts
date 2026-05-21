@@ -61,6 +61,8 @@ export interface Campaign {
   clickCount?: number;
   replyCount?: number;
   bounceCount?: number;
+  /** @nullable */
+  scheduledStartAt?: string | null;
   createdAt: string;
 }
 
@@ -72,6 +74,8 @@ export interface CampaignInput {
   trackOpens?: boolean;
   trackClicks?: boolean;
   includeUnsubscribe?: boolean;
+  /** @nullable */
+  scheduledStartAt?: string | null;
 }
 
 export interface CampaignUpdate {
@@ -82,6 +86,8 @@ export interface CampaignUpdate {
   trackOpens?: boolean;
   trackClicks?: boolean;
   includeUnsubscribe?: boolean;
+  /** @nullable */
+  scheduledStartAt?: string | null;
 }
 
 export interface CampaignStatsOverview {

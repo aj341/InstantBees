@@ -853,6 +853,9 @@ components:
           type: integer
         bounceCount:
           type: integer
+        scheduledStartAt:
+          type: ["string", "null"]
+          format: date-time
         createdAt:
           type: string
 
@@ -874,6 +877,9 @@ components:
           type: boolean
         includeUnsubscribe:
           type: boolean
+        scheduledStartAt:
+          type: ["string", "null"]
+          format: date-time
 
     CampaignUpdate:
       type: object
@@ -892,6 +898,9 @@ components:
           type: boolean
         includeUnsubscribe:
           type: boolean
+        scheduledStartAt:
+          type: ["string", "null"]
+          format: date-time
 
     CampaignStatsOverview:
       type: object

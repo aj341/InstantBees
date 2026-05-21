@@ -296,6 +296,11 @@ export default function CampaignDetail() {
               </Badge>
             </div>
             {campaign.fromName && <p className="text-sm text-muted-foreground">From: {campaign.fromName}</p>}
+            {campaign.scheduledStartAt && new Date(campaign.scheduledStartAt).getTime() > Date.now() && (
+              <p className="text-sm text-cyan-400" data-testid="text-scheduled-start">
+                Scheduled to start {new Date(campaign.scheduledStartAt).toLocaleString()}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex gap-2 shrink-0">

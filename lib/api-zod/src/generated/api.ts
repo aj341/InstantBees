@@ -36,6 +36,7 @@ export const ListCampaignsResponseItem = zod.object({
   "clickCount": zod.number().optional(),
   "replyCount": zod.number().optional(),
   "bounceCount": zod.number().optional(),
+  "scheduledStartAt": zod.coerce.date().nullish(),
   "createdAt": zod.string()
 })
 export const ListCampaignsResponse = zod.array(ListCampaignsResponseItem)
@@ -51,7 +52,8 @@ export const CreateCampaignBody = zod.object({
   "dailyLimit": zod.number().optional(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
-  "includeUnsubscribe": zod.boolean().optional()
+  "includeUnsubscribe": zod.boolean().optional(),
+  "scheduledStartAt": zod.coerce.date().nullish()
 })
 
 
@@ -93,6 +95,7 @@ export const GetCampaignResponse = zod.object({
   "clickCount": zod.number().optional(),
   "replyCount": zod.number().optional(),
   "bounceCount": zod.number().optional(),
+  "scheduledStartAt": zod.coerce.date().nullish(),
   "createdAt": zod.string()
 })
 
@@ -111,7 +114,8 @@ export const UpdateCampaignBody = zod.object({
   "dailyLimit": zod.number().optional(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
-  "includeUnsubscribe": zod.boolean().optional()
+  "includeUnsubscribe": zod.boolean().optional(),
+  "scheduledStartAt": zod.coerce.date().nullish()
 })
 
 export const UpdateCampaignResponse = zod.object({
@@ -130,6 +134,7 @@ export const UpdateCampaignResponse = zod.object({
   "clickCount": zod.number().optional(),
   "replyCount": zod.number().optional(),
   "bounceCount": zod.number().optional(),
+  "scheduledStartAt": zod.coerce.date().nullish(),
   "createdAt": zod.string()
 })
 
@@ -165,6 +170,7 @@ export const LaunchCampaignResponse = zod.object({
   "clickCount": zod.number().optional(),
   "replyCount": zod.number().optional(),
   "bounceCount": zod.number().optional(),
+  "scheduledStartAt": zod.coerce.date().nullish(),
   "createdAt": zod.string()
 })
 
@@ -192,6 +198,7 @@ export const PauseCampaignResponse = zod.object({
   "clickCount": zod.number().optional(),
   "replyCount": zod.number().optional(),
   "bounceCount": zod.number().optional(),
+  "scheduledStartAt": zod.coerce.date().nullish(),
   "createdAt": zod.string()
 })
 

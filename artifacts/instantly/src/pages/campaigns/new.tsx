@@ -21,6 +21,7 @@ const schema = z.object({
   trackOpens: z.boolean().default(true),
   trackClicks: z.boolean().default(true),
   includeUnsubscribe: z.boolean().default(true),
+  scheduledStartAt: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -50,10 +51,14 @@ export default function NewCampaign() {
       trackOpens: true,
       trackClicks: true,
       includeUnsubscribe: true,
+      scheduledStartAt: "",
     },
   });
 
   function onSubmit(values: FormValues) {
+    const scheduled = values.scheduledStartAt
+      ? new Date(values.scheduledStartAt).toISOString()
+      : undefined;
     create.mutate({
       data: {
         name: values.name,
@@ -63,6 +68,7 @@ export default function NewCampaign() {
         trackOpens: values.trackOpens,
         trackClicks: values.trackClicks,
         includeUnsubscribe: values.includeUnsubscribe,
+        scheduledStartAt: scheduled,
       },
     });
   }
@@ -140,6 +146,27 @@ export default function NewCampaign() {
                       <Input type="number" placeholder="50" data-testid="input-daily-limit" {...field} />
                     </FormControl>
                     <FormDescription>Max emails sent per day across all accounts</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="scheduledStartAt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Schedule Start Time</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="datetime-local"
+                        data-testid="input-scheduled-start-at"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Optional. If set, sends won't begin until this date/time even after you click Launch. Leave blank to start immediately on launch.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

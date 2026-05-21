@@ -26,5 +26,7 @@ export interface Campaign {
   clickCount?: number;
   replyCount?: number;
   bounceCount?: number;
+  /** @nullable */
+  scheduledStartAt?: Date | null;
   createdAt: string;
 }

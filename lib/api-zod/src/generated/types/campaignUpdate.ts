@@ -14,4 +14,6 @@ export interface CampaignUpdate {
   trackOpens?: boolean;
   trackClicks?: boolean;
   includeUnsubscribe?: boolean;
+  /** @nullable */
+  scheduledStartAt?: Date | null;
 }
