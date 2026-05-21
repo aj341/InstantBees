@@ -7,6 +7,11 @@ import { buildSessionMiddleware, requireAuth } from "./lib/auth";
 
 const app: Express = express();
 
+// Trust the Replit reverse proxy so req.secure reflects the original HTTPS
+// connection. Without this, secure session cookies are never issued in
+// production and every authenticated request returns 401 after login.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
