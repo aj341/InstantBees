@@ -13,4 +13,9 @@ export interface EmailAccountInput {
   provider: EmailAccountInputProvider;
   warmupEnabled?: boolean;
   dailySendLimit?: number;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUsername?: string;
+  /** SMTP password or app password. Stored encrypted; never returned. */
+  smtpPassword?: string;
 }

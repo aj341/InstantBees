@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { useListAccounts, useCreateAccount, useDeleteAccount, useUpdateAccount, getListAccountsQueryKey } from "@workspace/api-client-react";
+import {
+  useListAccounts,
+  useCreateAccount,
+  useDeleteAccount,
+  useUpdateAccount,
+  useTestAccount,
+  getListAccountsQueryKey,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,8 +19,14 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Mail, Flame, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Mail, Flame, CheckCircle2, XCircle, AlertCircle, Send } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+
+const PROVIDER_DEFAULTS: Record<string, { host: string; port: number }> = {
+  gmail: { host: "smtp.gmail.com", port: 587 },
+  outlook: { host: "smtp.office365.com", port: 587 },
+  smtp: { host: "", port: 587 },
+};
 
 const schema = z.object({
   email: z.string().email("Valid email required"),
@@ -21,6 +34,10 @@ const schema = z.object({
   provider: z.enum(["gmail", "outlook", "smtp"]),
   warmupEnabled: z.boolean().default(false),
   dailySendLimit: z.coerce.number().min(1).max(10000).default(50),
+  smtpHost: z.string().optional(),
+  smtpPort: z.coerce.number().min(1).max(65535).optional(),
+  smtpUsername: z.string().optional(),
+  smtpPassword: z.string().min(1, "Required to send emails"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -47,12 +64,12 @@ export default function Accounts() {
   const create = useCreateAccount({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Account connected" });
+        toast({ title: "Account added", description: "Click 'Test' on the card to verify sending works." });
         queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey() });
         setOpen(false);
         form.reset();
       },
-      onError: () => toast({ title: "Failed to connect account", variant: "destructive" }),
+      onError: () => toast({ title: "Failed to add account", variant: "destructive" }),
     },
   });
 
@@ -74,10 +91,45 @@ export default function Accounts() {
     },
   });
 
+  const test = useTestAccount({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey() });
+        if (data.ok) {
+          toast({ title: "Test email sent", description: "Check your own inbox to confirm delivery." });
+        } else {
+          toast({ title: "Connection failed", description: data.error ?? "Unknown error", variant: "destructive" });
+        }
+      },
+      onError: (err: any) => toast({ title: "Test failed", description: String(err?.message ?? err), variant: "destructive" }),
+    },
+  });
+
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: "", name: "", provider: "gmail", warmupEnabled: false, dailySendLimit: 50 },
+    defaultValues: {
+      email: "",
+      name: "",
+      provider: "gmail",
+      warmupEnabled: false,
+      dailySendLimit: 50,
+      smtpHost: PROVIDER_DEFAULTS.gmail.host,
+      smtpPort: PROVIDER_DEFAULTS.gmail.port,
+      smtpUsername: "",
+      smtpPassword: "",
+    },
   });
+
+  const provider = form.watch("provider");
+
+  function onProviderChange(value: string) {
+    form.setValue("provider", value as "gmail" | "outlook" | "smtp");
+    const defaults = PROVIDER_DEFAULTS[value];
+    if (defaults) {
+      form.setValue("smtpHost", defaults.host);
+      form.setValue("smtpPort", defaults.port);
+    }
+  }
 
   function onSubmit(values: FormValues) {
     create.mutate({ data: values });
@@ -123,6 +175,10 @@ export default function Accounts() {
                   </Badge>
                 </div>
 
+                {account.status === "error" && account.lastError && (
+                  <p className="text-xs text-destructive bg-destructive/10 rounded p-2 break-words">{account.lastError}</p>
+                )}
+
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <p className="text-muted-foreground text-xs">Provider</p>
@@ -132,10 +188,10 @@ export default function Accounts() {
                     <p className="text-muted-foreground text-xs">Sent Today</p>
                     <p className="font-medium">{account.sentToday} / {account.dailySendLimit}</p>
                   </div>
-                  {account.healthScore != null && (
-                    <div>
-                      <p className="text-muted-foreground text-xs">Health Score</p>
-                      <p className="font-medium">{account.healthScore}/100</p>
+                  {account.smtpHost && (
+                    <div className="col-span-2">
+                      <p className="text-muted-foreground text-xs">SMTP</p>
+                      <p className="font-medium text-xs truncate">{account.smtpHost}:{account.smtpPort}</p>
                     </div>
                   )}
                 </div>
@@ -150,15 +206,27 @@ export default function Accounts() {
                       data-testid={`switch-warmup-${account.id}`}
                     />
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground hover:text-destructive"
-                    onClick={() => remove.mutate({ id: account.id })}
-                    data-testid={`button-delete-account-${account.id}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => test.mutate({ id: account.id })}
+                      disabled={test.isPending || !account.hasSmtpPassword}
+                      data-testid={`button-test-account-${account.id}`}
+                    >
+                      <Send className="h-4 w-4 mr-1" />
+                      Test
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => remove.mutate({ id: account.id })}
+                      data-testid={`button-delete-account-${account.id}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -167,62 +235,111 @@ export default function Accounts() {
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Connect Email Account</DialogTitle>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email Address <span className="text-destructive">*</span></FormLabel>
-                  <FormControl><Input placeholder="you@company.com" data-testid="input-account-email" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Display Name</FormLabel>
-                  <FormControl><Input placeholder="Your Name" data-testid="input-account-name" {...field} /></FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="provider" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Provider <span className="text-destructive">*</span></FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-provider">
-                        <SelectValue placeholder="Select provider" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="gmail">Gmail</SelectItem>
-                      <SelectItem value="outlook">Outlook</SelectItem>
-                      <SelectItem value="smtp">Custom SMTP</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="dailySendLimit" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Daily Send Limit</FormLabel>
-                  <FormControl><Input type="number" placeholder="50" data-testid="input-daily-limit" {...field} /></FormControl>
-                  <FormDescription>Max emails sent per day from this account</FormDescription>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="warmupEnabled" render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between">
-                  <div>
-                    <FormLabel>Enable Warmup</FormLabel>
-                    <FormDescription>Gradually increase sending volume to improve deliverability</FormDescription>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
+              <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+                <FormField control={form.control} name="email" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email Address <span className="text-destructive">*</span></FormLabel>
+                    <FormControl><Input placeholder="you@company.com" data-testid="input-account-email" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="name" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Display Name</FormLabel>
+                    <FormControl><Input placeholder="Your Name" data-testid="input-account-name" {...field} /></FormControl>
+                    <FormDescription>Shown in the "From" field of outgoing emails</FormDescription>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="provider" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Provider <span className="text-destructive">*</span></FormLabel>
+                    <Select onValueChange={onProviderChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-provider">
+                          <SelectValue placeholder="Select provider" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="gmail">Gmail</SelectItem>
+                        <SelectItem value="outlook">Outlook</SelectItem>
+                        <SelectItem value="smtp">Custom SMTP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                {provider === "gmail" && (
+                  <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-1.5">
+                    <p className="font-medium">Gmail needs an App Password</p>
+                    <p className="text-muted-foreground">
+                      Your regular Gmail password won't work. Generate a 16-character app password at{" "}
+                      <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                        myaccount.google.com/apppasswords
+                      </a>{" "}
+                      (requires 2-Step Verification) and paste it below.
+                    </p>
                   </div>
-                  <FormControl>
-                    <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="switch-warmup-new" />
-                  </FormControl>
-                </FormItem>
-              )} />
-              <DialogFooter>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField control={form.control} name="smtpHost" render={({ field }) => (
+                    <FormItem className="col-span-2 sm:col-span-1">
+                      <FormLabel>SMTP Host</FormLabel>
+                      <FormControl><Input placeholder="smtp.gmail.com" data-testid="input-smtp-host" {...field} /></FormControl>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="smtpPort" render={({ field }) => (
+                    <FormItem className="col-span-2 sm:col-span-1">
+                      <FormLabel>Port</FormLabel>
+                      <FormControl><Input type="number" placeholder="587" data-testid="input-smtp-port" {...field} /></FormControl>
+                    </FormItem>
+                  )} />
+                </div>
+
+                <FormField control={form.control} name="smtpUsername" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>SMTP Username</FormLabel>
+                    <FormControl><Input placeholder="Leave blank to use email address" data-testid="input-smtp-username" {...field} /></FormControl>
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="smtpPassword" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>SMTP Password / App Password <span className="text-destructive">*</span></FormLabel>
+                    <FormControl><Input type="password" placeholder="16-character app password" data-testid="input-smtp-password" {...field} /></FormControl>
+                    <FormDescription>Stored encrypted. Never returned by the API.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="dailySendLimit" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Daily Send Limit</FormLabel>
+                    <FormControl><Input type="number" placeholder="50" data-testid="input-daily-limit" {...field} /></FormControl>
+                    <FormDescription>Max emails sent per day from this account</FormDescription>
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="warmupEnabled" render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between">
+                    <div>
+                      <FormLabel>Enable Warmup</FormLabel>
+                      <FormDescription>Gradually increase sending volume to improve deliverability</FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="switch-warmup-new" />
+                    </FormControl>
+                  </FormItem>
+                )} />
+              </div>
+              <DialogFooter className="shrink-0 pt-4 border-t border-border mt-2">
                 <Button type="button" variant="outline" onClick={() => setOpen(false)} data-testid="button-cancel-account">Cancel</Button>
                 <Button type="submit" disabled={create.isPending} data-testid="button-submit-account">
                   {create.isPending ? "Connecting..." : "Connect Account"}

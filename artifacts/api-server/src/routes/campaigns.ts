@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
-import { db, campaignsTable, campaignLeadsTable, sequenceStepsTable, dailyStatsTable } from "@workspace/db";
+import { eq, sql, and, asc } from "drizzle-orm";
+import { db, campaignsTable, campaignLeadsTable, sequenceStepsTable, dailyStatsTable, leadsTable, emailAccountsTable, emailSendJobsTable } from "@workspace/db";
 import {
   CreateCampaignBody,
   UpdateCampaignBody,
@@ -108,11 +108,85 @@ router.post("/campaigns/:id/launch", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [campaign] = await db.update(campaignsTable).set({ status: "active" }).where(eq(campaignsTable.id, params.data.id)).returning();
-  if (!campaign) {
+  const id = params.data.id;
+
+  const [existing] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, id));
+  if (!existing) {
     res.status(404).json({ error: "Campaign not found" });
     return;
   }
+
+  const steps = await db
+    .select()
+    .from(sequenceStepsTable)
+    .where(eq(sequenceStepsTable.campaignId, id))
+    .orderBy(asc(sequenceStepsTable.stepNumber));
+  if (steps.length === 0) {
+    res.status(400).json({ error: "Add at least one sequence step before launching" });
+    return;
+  }
+
+  const leadRows = await db
+    .select({ lead: leadsTable })
+    .from(campaignLeadsTable)
+    .innerJoin(leadsTable, eq(campaignLeadsTable.leadId, leadsTable.id))
+    .where(eq(campaignLeadsTable.campaignId, id));
+  const leads = leadRows.map((r) => r.lead).filter((l) => l.status === "active");
+  if (leads.length === 0) {
+    res.status(400).json({ error: "Add at least one active lead before launching" });
+    return;
+  }
+
+  const accounts = await db
+    .select()
+    .from(emailAccountsTable)
+    .where(eq(emailAccountsTable.status, "connected"));
+  const sendable = accounts.filter((a) => !!a.smtpPasswordEnc);
+  if (sendable.length === 0) {
+    res.status(400).json({ error: "Connect at least one email account with SMTP credentials before launching" });
+    return;
+  }
+
+  const existingJobs = await db
+    .select({ leadId: emailSendJobsTable.leadId, stepId: emailSendJobsTable.stepId, status: emailSendJobsTable.status })
+    .from(emailSendJobsTable)
+    .where(eq(emailSendJobsTable.campaignId, id));
+  const existingKeys = new Set(
+    existingJobs
+      .filter((j) => j.status !== "failed" && j.status !== "skipped")
+      .map((j) => `${j.leadId}:${j.stepId}`),
+  );
+
+  const now = Date.now();
+  const jobs: Array<typeof emailSendJobsTable.$inferInsert> = [];
+  let acctIdx = 0;
+  for (const lead of leads) {
+    const account = sendable[acctIdx % sendable.length]!;
+    acctIdx++;
+    let cumulativeDelayMs = 0;
+    for (const step of steps) {
+      cumulativeDelayMs += step.delayDays * 24 * 60 * 60 * 1000;
+      const key = `${lead.id}:${step.id}`;
+      if (existingKeys.has(key)) continue;
+      jobs.push({
+        campaignId: id,
+        leadId: lead.id,
+        stepId: step.id,
+        accountId: account.id,
+        scheduledAt: new Date(now + cumulativeDelayMs),
+        status: "pending",
+      });
+    }
+  }
+  if (jobs.length > 0) {
+    await db.insert(emailSendJobsTable).values(jobs);
+  }
+
+  const [campaign] = await db
+    .update(campaignsTable)
+    .set({ status: "active", leadsCount: leads.length })
+    .where(eq(campaignsTable.id, id))
+    .returning();
   res.json(campaign);
 });
 

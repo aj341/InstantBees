@@ -20,5 +20,14 @@ export interface EmailAccount {
   sentToday?: number;
   /** @nullable */
   healthScore?: number | null;
+  /** @nullable */
+  smtpHost?: string | null;
+  /** @nullable */
+  smtpPort?: number | null;
+  /** @nullable */
+  smtpUsername?: string | null;
+  hasSmtpPassword?: boolean;
+  /** @nullable */
+  lastError?: string | null;
   createdAt: string;
 }

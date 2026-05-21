@@ -15,6 +15,11 @@ export const emailAccountsTable = pgTable("email_accounts", {
   dailySendLimit: integer("daily_send_limit").notNull().default(50),
   sentToday: integer("sent_today").notNull().default(0),
   healthScore: integer("health_score"),
+  smtpHost: text("smtp_host"),
+  smtpPort: integer("smtp_port"),
+  smtpUsername: text("smtp_username"),
+  smtpPasswordEnc: text("smtp_password_enc"),
+  lastError: text("last_error"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

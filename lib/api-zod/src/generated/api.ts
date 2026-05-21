@@ -433,6 +433,11 @@ export const ListAccountsResponseItem = zod.object({
   "dailySendLimit": zod.number(),
   "sentToday": zod.number().optional(),
   "healthScore": zod.number().nullish(),
+  "smtpHost": zod.string().nullish(),
+  "smtpPort": zod.number().nullish(),
+  "smtpUsername": zod.string().nullish(),
+  "hasSmtpPassword": zod.boolean().optional(),
+  "lastError": zod.string().nullish(),
   "createdAt": zod.string()
 })
 export const ListAccountsResponse = zod.array(ListAccountsResponseItem)
@@ -446,7 +451,24 @@ export const CreateAccountBody = zod.object({
   "name": zod.string().optional(),
   "provider": zod.enum(['gmail', 'outlook', 'smtp']),
   "warmupEnabled": zod.boolean().optional(),
-  "dailySendLimit": zod.number().optional()
+  "dailySendLimit": zod.number().optional(),
+  "smtpHost": zod.string().optional(),
+  "smtpPort": zod.number().optional(),
+  "smtpUsername": zod.string().optional(),
+  "smtpPassword": zod.string().optional().describe('SMTP password or app password. Stored encrypted; never returned.')
+})
+
+
+/**
+ * @summary Verify SMTP connection for an account by sending a small test email to itself
+ */
+export const TestAccountParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const TestAccountResponse = zod.object({
+  "ok": zod.boolean(),
+  "error": zod.string().optional()
 })
 
 
@@ -461,7 +483,11 @@ export const UpdateAccountBody = zod.object({
   "name": zod.string().optional(),
   "warmupEnabled": zod.boolean().optional(),
   "dailySendLimit": zod.number().optional(),
-  "status": zod.enum(['connected', 'disconnected', 'error', 'warming']).optional()
+  "status": zod.enum(['connected', 'disconnected', 'error', 'warming']).optional(),
+  "smtpHost": zod.string().optional(),
+  "smtpPort": zod.number().optional(),
+  "smtpUsername": zod.string().optional(),
+  "smtpPassword": zod.string().optional()
 })
 
 export const UpdateAccountResponse = zod.object({
@@ -474,6 +500,11 @@ export const UpdateAccountResponse = zod.object({
   "dailySendLimit": zod.number(),
   "sentToday": zod.number().optional(),
   "healthScore": zod.number().nullish(),
+  "smtpHost": zod.string().nullish(),
+  "smtpPort": zod.number().nullish(),
+  "smtpUsername": zod.string().nullish(),
+  "hasSmtpPassword": zod.boolean().optional(),
+  "lastError": zod.string().nullish(),
   "createdAt": zod.string()
 })
 

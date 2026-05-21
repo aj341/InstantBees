@@ -6,3 +6,4 @@ export * from "./inbox";
 export * from "./analytics";
 export * from "./templates";
 export * from "./lists";
+export * from "./send-jobs";

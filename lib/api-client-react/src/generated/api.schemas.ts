@@ -241,6 +241,15 @@ export interface EmailAccount {
   sentToday?: number;
   /** @nullable */
   healthScore?: number | null;
+  /** @nullable */
+  smtpHost?: string | null;
+  /** @nullable */
+  smtpPort?: number | null;
+  /** @nullable */
+  smtpUsername?: string | null;
+  hasSmtpPassword?: boolean;
+  /** @nullable */
+  lastError?: string | null;
   createdAt: string;
 }
 
@@ -259,6 +268,11 @@ export interface EmailAccountInput {
   provider: EmailAccountInputProvider;
   warmupEnabled?: boolean;
   dailySendLimit?: number;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUsername?: string;
+  /** SMTP password or app password. Stored encrypted; never returned. */
+  smtpPassword?: string;
 }
 
 export type EmailAccountUpdateStatus = typeof EmailAccountUpdateStatus[keyof typeof EmailAccountUpdateStatus];
@@ -276,6 +290,15 @@ export interface EmailAccountUpdate {
   warmupEnabled?: boolean;
   dailySendLimit?: number;
   status?: EmailAccountUpdateStatus;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUsername?: string;
+  smtpPassword?: string;
+}
+
+export interface AccountTestResult {
+  ok: boolean;
+  error?: string;
 }
 
 /**

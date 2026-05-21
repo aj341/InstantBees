@@ -12,4 +12,8 @@ export interface EmailAccountUpdate {
   warmupEnabled?: boolean;
   dailySendLimit?: number;
   status?: EmailAccountUpdateStatus;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUsername?: string;
+  smtpPassword?: string;
 }

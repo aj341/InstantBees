@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AccountTestResult,
   AddLeadsToCampaign200,
   AnalyticsSummary,
   BulkImportResult,
@@ -1822,6 +1823,76 @@ export const useCreateAccount = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateAccountMutationOptions(options));
+    }
+
+export const getTestAccountUrl = (id: number,) => {
+
+
+
+
+  return `/api/accounts/${id}/test`
+}
+
+/**
+ * @summary Verify SMTP connection for an account by sending a small test email to itself
+ */
+export const testAccount = async (id: number, options?: RequestInit): Promise<AccountTestResult> => {
+
+  return customFetch<AccountTestResult>(getTestAccountUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getTestAccountMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testAccount>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testAccount>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['testAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testAccount>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  testAccount(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestAccountMutationResult = NonNullable<Awaited<ReturnType<typeof testAccount>>>
+
+    export type TestAccountMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Verify SMTP connection for an account by sending a small test email to itself
+ */
+export const useTestAccount = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testAccount>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof testAccount>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getTestAccountMutationOptions(options));
     }
 
 export const getUpdateAccountUrl = (id: number,) => {

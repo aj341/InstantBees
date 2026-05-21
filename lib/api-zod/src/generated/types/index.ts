@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './accountTestResult';
 export * from './addLeadsToCampaign200';
 export * from './analyticsSummary';
 export * from './bulkImportResult';

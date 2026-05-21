@@ -489,6 +489,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/EmailAccount"
 
+  /accounts/{id}/test:
+    post:
+      operationId: testAccount
+      tags: [accounts]
+      summary: Verify SMTP connection for an account by sending a small test email to itself
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountTestResult"
+
   /accounts/{id}:
     patch:
       operationId: updateAccount
@@ -1015,6 +1033,16 @@ components:
           type: integer
         healthScore:
           type: ["integer", "null"]
+        smtpHost:
+          type: ["string", "null"]
+        smtpPort:
+          type: ["integer", "null"]
+        smtpUsername:
+          type: ["string", "null"]
+        hasSmtpPassword:
+          type: boolean
+        lastError:
+          type: ["string", "null"]
         createdAt:
           type: string
 
@@ -1033,6 +1061,15 @@ components:
           type: boolean
         dailySendLimit:
           type: integer
+        smtpHost:
+          type: string
+        smtpPort:
+          type: integer
+        smtpUsername:
+          type: string
+        smtpPassword:
+          type: string
+          description: SMTP password or app password. Stored encrypted; never returned.
 
     EmailAccountUpdate:
       type: object
@@ -1046,6 +1083,23 @@ components:
         status:
           type: string
           enum: [connected, disconnected, error, warming]
+        smtpHost:
+          type: string
+        smtpPort:
+          type: integer
+        smtpUsername:
+          type: string
+        smtpPassword:
+          type: string
+
+    AccountTestResult:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        error:
+          type: string
 
     # ── Inbox ─────────────────────────────────────────────────────────────────
 
