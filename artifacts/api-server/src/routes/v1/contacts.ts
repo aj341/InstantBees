@@ -1,6 +1,32 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, and } from "drizzle-orm";
-import { db, leadsTable, leadListsTable, listLeadsTable, campaignLeadsTable, campaignsTable } from "@workspace/db";
+import { eq, ilike, or, and, inArray } from "drizzle-orm";
+import { db, leadsTable, leadListsTable, listLeadsTable, campaignLeadsTable, campaignsTable, labelsTable, leadLabelsTable, type Lead, type Label } from "@workspace/db";
+
+async function attachLabelsToContacts<T extends Pick<Lead, "id">>(contacts: T[]): Promise<(T & { labels: Label[] })[]> {
+  if (contacts.length === 0) return [];
+  const ids = contacts.map((c) => c.id);
+  const rows = await db
+    .select({ leadId: leadLabelsTable.leadId, id: labelsTable.id, name: labelsTable.name, color: labelsTable.color, createdAt: labelsTable.createdAt })
+    .from(leadLabelsTable)
+    .innerJoin(labelsTable, eq(leadLabelsTable.labelId, labelsTable.id))
+    .where(inArray(leadLabelsTable.leadId, ids));
+  const byLead = new Map<number, Label[]>();
+  for (const r of rows) {
+    const { leadId, ...lbl } = r;
+    const list = byLead.get(leadId) ?? [];
+    list.push(lbl as Label);
+    byLead.set(leadId, list);
+  }
+  return contacts.map((c) => ({ ...c, labels: byLead.get(c.id) ?? [] }));
+}
+
+async function resolveLabelIds(rawLabelIds: unknown): Promise<number[]> {
+  if (!Array.isArray(rawLabelIds)) return [];
+  const ids = rawLabelIds.filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+  if (ids.length === 0) return [];
+  const valid = await db.select({ id: labelsTable.id }).from(labelsTable).where(inArray(labelsTable.id, ids));
+  return valid.map((v) => v.id);
+}
 
 const router: IRouter = Router();
 
@@ -51,7 +77,7 @@ router.post("/lists/:listId/contacts/bulk", async (req, res): Promise<void> => {
   type Row = { email: string; firstName?: string; lastName?: string; company?: string; title?: string; website?: string; phone?: string };
   let rawContacts: Row[] = [];
 
-  const { contacts, csvText } = req.body ?? {};
+  const { contacts, csvText, labelIds: rawLabelIds } = req.body ?? {};
 
   if (csvText && typeof csvText === "string") {
     const lines = csvText.trim().split("\n");
@@ -102,7 +128,16 @@ router.post("/lists/:listId/contacts/bulk", async (req, res): Promise<void> => {
     await db.insert(listLeadsTable).values(addedIds.map(lid => ({ listId, leadId: lid }))).onConflictDoNothing();
   }
 
-  res.json({ added, skipped, total: rawContacts.length });
+  // Apply labels to every contact that was added or already existed.
+  const validLabelIds = await resolveLabelIds(rawLabelIds);
+  let labelsApplied = 0;
+  if (validLabelIds.length > 0 && addedIds.length > 0) {
+    const linkRows = addedIds.flatMap((lid) => validLabelIds.map((labelId) => ({ leadId: lid, labelId })));
+    await db.insert(leadLabelsTable).values(linkRows).onConflictDoNothing();
+    labelsApplied = validLabelIds.length;
+  }
+
+  res.json({ added, skipped, total: rawContacts.length, labelsApplied });
 });
 
 // ── Contacts (leads) ───────────────────────────────────────────────────────
@@ -132,31 +167,95 @@ router.get("/contacts", async (req, res): Promise<void> => {
     );
   }
 
+  // Optional ?labelIds=1,2 filter — contact must have ALL given labels.
+  if (req.query.labelIds) {
+    const ids = String(req.query.labelIds).split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => Number.isFinite(n));
+    if (ids.length > 0) {
+      const links = await db.select().from(leadLabelsTable).where(inArray(leadLabelsTable.labelId, ids));
+      const countByLead = new Map<number, number>();
+      for (const l of links) countByLead.set(l.leadId, (countByLead.get(l.leadId) ?? 0) + 1);
+      contacts = contacts.filter((c) => (countByLead.get(c.id) ?? 0) === ids.length);
+    }
+  }
+
   const total = contacts.length;
   const page = contacts.slice(offset, offset + limit);
-  res.json({ data: page, total, limit, offset });
+  res.json({ data: await attachLabelsToContacts(page), total, limit, offset });
 });
 
 // GET /api/v1/contacts/:id
 router.get("/contacts/:id", async (req, res): Promise<void> => {
   const rows = await db.select().from(leadsTable).where(eq(leadsTable.id, parseInt(req.params.id, 10)));
   if (!rows[0]) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Contact not found" } }); return; }
-  res.json(rows[0]);
+  const [withLabels] = await attachLabelsToContacts([rows[0]]);
+  res.json(withLabels);
 });
 
 // POST /api/v1/contacts
 router.post("/contacts", async (req, res): Promise<void> => {
-  const { email, firstName, lastName, company, title, website, phone } = req.body ?? {};
+  const { email, firstName, lastName, company, title, website, phone, labelIds: rawLabelIds } = req.body ?? {};
   if (!email || !String(email).includes("@")) {
     res.status(400).json({ error: { code: "INVALID_INPUT", message: "Valid 'email' is required" } });
     return;
   }
   try {
     const [row] = await db.insert(leadsTable).values({ email: String(email).toLowerCase().trim(), firstName: firstName || null, lastName: lastName || null, company: company || null, title: title || null, website: website || null, phone: phone || null }).returning();
-    res.status(201).json(row);
+    const validLabelIds = await resolveLabelIds(rawLabelIds);
+    if (validLabelIds.length > 0) {
+      await db.insert(leadLabelsTable).values(validLabelIds.map((labelId) => ({ leadId: row.id, labelId }))).onConflictDoNothing();
+    }
+    const [withLabels] = await attachLabelsToContacts([row]);
+    res.status(201).json(withLabels);
   } catch {
     res.status(409).json({ error: { code: "CONFLICT", message: "Email already exists" } });
   }
+});
+
+// PUT /api/v1/contacts/:id/labels — replace labels on a contact
+router.put("/contacts/:id/labels", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const { labelIds: rawLabelIds } = req.body ?? {};
+  const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
+  if (!lead) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Contact not found" } }); return; }
+  const validLabelIds = await resolveLabelIds(rawLabelIds);
+  const result = await db.transaction(async (tx) => {
+    await tx.delete(leadLabelsTable).where(eq(leadLabelsTable.leadId, id));
+    if (validLabelIds.length > 0) {
+      await tx.insert(leadLabelsTable).values(validLabelIds.map((labelId) => ({ leadId: id, labelId }))).onConflictDoNothing();
+    }
+    return await attachLabelsToContacts([lead]);
+  });
+  res.json(result[0]);
+});
+
+// ── Labels ─────────────────────────────────────────────────────────────────
+
+// GET /api/v1/labels
+router.get("/labels", async (_req, res): Promise<void> => {
+  const rows = await db.select().from(labelsTable).orderBy(labelsTable.name);
+  res.json({ data: rows, total: rows.length });
+});
+
+// POST /api/v1/labels — idempotent: returns existing label if name matches
+router.post("/labels", async (req, res): Promise<void> => {
+  const { name, color } = req.body ?? {};
+  if (!name || typeof name !== "string" || !name.trim()) {
+    res.status(400).json({ error: { code: "INVALID_INPUT", message: "'name' is required" } });
+    return;
+  }
+  const trimmed = name.trim();
+  const existing = await db.select().from(labelsTable).where(eq(labelsTable.name, trimmed));
+  if (existing[0]) { res.status(200).json(existing[0]); return; }
+  const [row] = await db.insert(labelsTable).values({ name: trimmed, color: (typeof color === "string" && color) || "#06b6d4" }).returning();
+  res.status(201).json(row);
+});
+
+// DELETE /api/v1/labels/:id
+router.delete("/labels/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: { code: "INVALID_INPUT", message: "Invalid label id" } }); return; }
+  await db.delete(labelsTable).where(eq(labelsTable.id, id));
+  res.status(204).end();
 });
 
 // PATCH /api/v1/contacts/:id
