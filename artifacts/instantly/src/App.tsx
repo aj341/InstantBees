@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AppLayout } from "@/components/layout/app-layout";
+import { AuthGate } from "@/components/auth-gate";
 import Dashboard from "@/pages/dashboard";
 import CampaignsList from "@/pages/campaigns/index";
 import NewCampaign from "@/pages/campaigns/new";
@@ -18,6 +19,7 @@ const queryClient = new QueryClient();
 
 function Router() {
   return (
+    <AuthGate>
     <AppLayout>
       <Switch>
         <Route path="/" component={Dashboard} />
@@ -32,6 +34,7 @@ function Router() {
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
+    </AuthGate>
   );
 }
 

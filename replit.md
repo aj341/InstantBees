@@ -11,6 +11,7 @@ A full-featured clone of instantly.ai — a cold email outreach and sales automa
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string, `SESSION_SECRET`
+- Optional env: `ADMIN_USERNAME`, `ADMIN_PASSWORD` — login credentials (default `admin`/`admin`, with a warning logged at boot)
 
 ## Stack
 
@@ -39,6 +40,13 @@ A full-featured clone of instantly.ai — a cold email outreach and sales automa
 - Rates (open rate, reply rate, bounce rate) are always stored as raw counts and computed as percentages on-demand — never stored as percentages
 - Campaign analytics are computed on-the-fly from the campaign's count columns
 - Inbox uses sentiment analysis labels (positive/neutral/negative) stored with each message
+
+## Auth
+
+- Username/password login, session cookies stored in Postgres via `connect-pg-simple` (table `user_sessions`).
+- `requireAuth` middleware gates everything under `/api` except `/api/auth/*`, `/api/track/*`, `/api/unsubscribe/*`, `/api/healthz`, `/api/v1/*` (the v1 API uses its own API-key auth).
+- Frontend wraps the app in `<AuthGate>` which redirects to the login page when `/api/auth/me` returns 401.
+- Credentials are compared with `crypto.timingSafeEqual` against SHA-256 hashes of the env values.
 
 ## Product
 

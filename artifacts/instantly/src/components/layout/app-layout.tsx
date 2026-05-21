@@ -1,6 +1,8 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Megaphone, Users, Mail, Inbox, BarChart, FileText } from "lucide-react";
+import { LayoutDashboard, Megaphone, Users, Mail, Inbox, BarChart, FileText, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth, useLogout } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -14,6 +16,8 @@ const NAV_ITEMS = [
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const { data: me } = useAuth();
+  const logout = useLogout();
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -42,6 +46,24 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+        <div className="border-t border-border p-3 space-y-2">
+          {me && (
+            <div className="px-1 text-xs text-muted-foreground truncate" data-testid="text-current-user">
+              Signed in as <span className="text-foreground font-medium">{me.username}</span>
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-muted-foreground hover:text-foreground"
+            onClick={() => logout.mutate()}
+            disabled={logout.isPending}
+            data-testid="button-logout"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Sign out
+          </Button>
+        </div>
       </aside>
       <main className="flex-1 overflow-auto bg-muted/20">
         {children}

@@ -14,6 +14,7 @@ import {
   useLaunchCampaign,
   usePauseCampaign,
   useDeleteCampaign,
+  useUpdateCampaign,
   useListTemplates,
   useListAccounts,
   useSendTestStep,
@@ -38,6 +39,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -158,6 +160,20 @@ export default function CampaignDetail() {
       onError: () => toast({ title: "Failed to pause", variant: "destructive" }),
     },
   });
+
+  const updateCampaign = useUpdateCampaign({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetCampaignQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+      },
+      onError: () => toast({ title: "Failed to update tracking settings", variant: "destructive" }),
+    },
+  });
+
+  function updateTracking(data: { trackOpens?: boolean; trackClicks?: boolean; includeUnsubscribe?: boolean }) {
+    updateCampaign.mutate({ id, data });
+  }
 
   const remove = useDeleteCampaign({
     mutation: {
@@ -365,17 +381,32 @@ export default function CampaignDetail() {
                   <dt className="text-muted-foreground">Reply-To</dt>
                   <dd className="font-medium">{campaign.replyTo ?? "—"}</dd>
                 </div>
-                <div>
+                <div className="flex items-center justify-between">
                   <dt className="text-muted-foreground">Track Opens</dt>
-                  <dd className="font-medium">{campaign.trackOpens ? "Yes" : "No"}</dd>
+                  <Switch
+                    checked={campaign.trackOpens}
+                    onCheckedChange={(v) => updateTracking({ trackOpens: v })}
+                    disabled={updateCampaign.isPending}
+                    data-testid="switch-track-opens"
+                  />
                 </div>
-                <div>
+                <div className="flex items-center justify-between">
                   <dt className="text-muted-foreground">Track Clicks</dt>
-                  <dd className="font-medium">{campaign.trackClicks ? "Yes" : "No"}</dd>
+                  <Switch
+                    checked={campaign.trackClicks}
+                    onCheckedChange={(v) => updateTracking({ trackClicks: v })}
+                    disabled={updateCampaign.isPending}
+                    data-testid="switch-track-clicks"
+                  />
                 </div>
-                <div>
+                <div className="flex items-center justify-between">
                   <dt className="text-muted-foreground">Unsubscribe Link</dt>
-                  <dd className="font-medium">{campaign.includeUnsubscribe ? "Included" : "Off"}</dd>
+                  <Switch
+                    checked={campaign.includeUnsubscribe}
+                    onCheckedChange={(v) => updateTracking({ includeUnsubscribe: v })}
+                    disabled={updateCampaign.isPending}
+                    data-testid="switch-include-unsubscribe"
+                  />
                 </div>
               </dl>
             </CardContent>

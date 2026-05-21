@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { buildSessionMiddleware, requireAuth } from "./lib/auth";
 
 const app: Express = express();
 
@@ -33,6 +34,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/leads/bulk", express.json({ limit: "10mb" }));
 app.use("/api/leads/bulk", express.text({ type: ["text/csv", "application/csv"], limit: "10mb" }));
 
+app.use(buildSessionMiddleware());
+app.use("/api", requireAuth);
 app.use("/api", router);
 
 export default app;

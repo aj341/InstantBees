@@ -149,13 +149,34 @@ export function rewriteLinksForTracking(html: string, baseUrl: string, token: st
   });
 }
 
+/**
+ * Wrap a plain-text body in basic HTML so Gmail/Outlook render it as a single
+ * coherent message instead of collapsing/clipping. Preserves blank lines.
+ */
+function wrapPlainTextAsHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  const paragraphs = escaped.split(/\n{2,}/).map((p) => p.replace(/\n/g, "<br />"));
+  return paragraphs
+    .map(
+      (p) =>
+        `<p style="margin:0 0 1em 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.5;color:#222;">${p}</p>`,
+    )
+    .join("");
+}
+
 function injectHtmlFooter(html: string, pixelUrl: string | null, unsubUrl: string | null): string {
   const footerParts: string[] = [];
   if (unsubUrl) {
+    // Inline, single line of small grey text. No <hr>, no <div> block, no border —
+    // Gmail otherwise treats the divider as a signature delimiter and hides the body
+    // behind a "…" toggle.
     footerParts.push(
-      `<div style="margin-top:24px;padding-top:12px;border-top:1px solid #eee;font-size:11px;color:#888;font-family:Arial,sans-serif;">` +
-      `If you'd prefer not to hear from us, <a href="${unsubUrl}" style="color:#888;">unsubscribe here</a>.` +
-      `</div>`,
+      `<p style="margin:2em 0 0 0;font-family:Arial,sans-serif;font-size:11px;color:#9ca3af;">` +
+        `<a href="${unsubUrl}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe</a>` +
+        `</p>`,
     );
   }
   if (pixelUrl) {
@@ -171,7 +192,9 @@ function injectHtmlFooter(html: string, pixelUrl: string | null, unsubUrl: strin
 
 function buildTextFooter(text: string, unsubUrl: string | null): string {
   if (!unsubUrl) return text;
-  return `${text}\n\n---\nTo unsubscribe: ${unsubUrl}\n`;
+  // No "--" / "---" separator — those trigger Gmail's signature-trim heuristic and
+  // hide the body. A plain blank line is enough.
+  return `${text}\n\nUnsubscribe: ${unsubUrl}\n`;
 }
 
 export async function sendEmail(account: AccountWithSecret, input: SendInput): Promise<{ messageId: string }> {
@@ -201,12 +224,12 @@ export async function sendEmail(account: AccountWithSecret, input: SendInput): P
   };
   if (input.messageId) mailOptions.messageId = input.messageId;
 
-  if (isHtml) {
-    mailOptions.html = injectHtmlFooter(bodyForSend, pixelUrl, unsubUrl);
-    mailOptions.text = buildTextFooter(stripHtml(bodyForSend), unsubUrl);
-  } else {
-    mailOptions.text = buildTextFooter(bodyForSend, unsubUrl);
-  }
+  // Always send both text and HTML parts. Plain-text bodies get wrapped in basic HTML so
+  // Gmail/Outlook render them as a coherent message rather than collapsing them behind "…".
+  const htmlBody = isHtml ? bodyForSend : wrapPlainTextAsHtml(bodyForSend);
+  const textBody = isHtml ? stripHtml(bodyForSend) : bodyForSend;
+  mailOptions.html = injectHtmlFooter(htmlBody, pixelUrl, unsubUrl);
+  mailOptions.text = buildTextFooter(textBody, unsubUrl);
 
   const info = await transport.sendMail(mailOptions);
   return { messageId: info.messageId };
