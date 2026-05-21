@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, and, asc } from "drizzle-orm";
-import { db, campaignsTable, campaignLeadsTable, sequenceStepsTable, dailyStatsTable, leadsTable, emailAccountsTable, emailSendJobsTable } from "@workspace/db";
+import { db, campaignsTable, campaignLeadsTable, sequenceStepsTable, dailyStatsTable, leadsTable, emailAccountsTable, emailSendJobsTable, unsubscribesTable, inboxMessagesTable } from "@workspace/db";
 import {
   CreateCampaignBody,
   UpdateCampaignBody,
@@ -93,7 +93,15 @@ router.delete("/campaigns/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [campaign] = await db.delete(campaignsTable).where(eq(campaignsTable.id, params.data.id)).returning();
+  const cid = params.data.id;
+  // Cascade — these tables don't have FK constraints declared in Drizzle, so we clean up by hand
+  // so a deleted campaign doesn't leave orphan rows skewing analytics.
+  await db.delete(emailSendJobsTable).where(eq(emailSendJobsTable.campaignId, cid));
+  await db.delete(sequenceStepsTable).where(eq(sequenceStepsTable.campaignId, cid));
+  await db.delete(campaignLeadsTable).where(eq(campaignLeadsTable.campaignId, cid));
+  await db.delete(unsubscribesTable).where(eq(unsubscribesTable.campaignId, cid));
+  await db.delete(inboxMessagesTable).where(eq(inboxMessagesTable.campaignId, cid));
+  const [campaign] = await db.delete(campaignsTable).where(eq(campaignsTable.id, cid)).returning();
   if (!campaign) {
     res.status(404).json({ error: "Campaign not found" });
     return;
