@@ -609,10 +609,10 @@ export default function CampaignDetail() {
                 </FormItem>
               )} />
 
-              {/* Body type toggle */}
-              <FormItem>
+              {/* Body type toggle (not bound to a form field — plain markup to avoid useFormField) */}
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <FormLabel>Body</FormLabel>
+                  <label className="text-sm font-medium leading-none">Body</label>
                   <div className="flex items-center gap-1 rounded-md border border-border bg-muted/30 p-0.5">
                     <button
                       type="button"
@@ -640,7 +640,7 @@ export default function CampaignDetail() {
                     </button>
                   </div>
                 </div>
-              </FormItem>
+              </div>
 
               <FormField control={seqForm.control} name="body" render={({ field }) => (
                 <FormItem>
