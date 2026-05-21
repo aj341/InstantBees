@@ -1,4 +1,5 @@
 import nodemailer, { type Transporter } from "nodemailer";
+import { randomBytes } from "node:crypto";
 import type { EmailAccount } from "@workspace/db";
 import { decryptSecret } from "./crypto";
 
@@ -7,8 +8,8 @@ export type AccountWithSecret = Pick<
   "email" | "name" | "provider" | "smtpHost" | "smtpPort" | "smtpUsername" | "smtpPasswordEnc"
 >;
 
-const GMAIL = { host: "smtp.gmail.com", port: 587 };
-const OUTLOOK = { host: "smtp.office365.com", port: 587 };
+const GMAIL = { smtp: { host: "smtp.gmail.com", port: 587 }, imap: { host: "imap.gmail.com", port: 993 } };
+const OUTLOOK = { smtp: { host: "smtp.office365.com", port: 587 }, imap: { host: "outlook.office365.com", port: 993 } };
 
 export function resolveSmtp(account: AccountWithSecret): { host: string; port: number; username: string; password: string } {
   if (!account.smtpPasswordEnc) {
@@ -18,13 +19,33 @@ export function resolveSmtp(account: AccountWithSecret): { host: string; port: n
   let port = account.smtpPort;
   if (!host || !port) {
     if (account.provider === "gmail") {
-      host = host ?? GMAIL.host;
-      port = port ?? GMAIL.port;
+      host = host ?? GMAIL.smtp.host;
+      port = port ?? GMAIL.smtp.port;
     } else if (account.provider === "outlook") {
-      host = host ?? OUTLOOK.host;
-      port = port ?? OUTLOOK.port;
+      host = host ?? OUTLOOK.smtp.host;
+      port = port ?? OUTLOOK.smtp.port;
     } else {
       throw new Error("SMTP host/port not configured");
+    }
+  }
+  const username = account.smtpUsername || account.email;
+  const password = decryptSecret(account.smtpPasswordEnc);
+  return { host, port, username, password };
+}
+
+export function resolveImap(account: Pick<EmailAccount, "provider" | "imapHost" | "imapPort" | "email" | "smtpUsername" | "smtpPasswordEnc">): { host: string; port: number; username: string; password: string } | null {
+  if (!account.smtpPasswordEnc) return null;
+  let host = account.imapHost;
+  let port = account.imapPort;
+  if (!host || !port) {
+    if (account.provider === "gmail") {
+      host = host ?? GMAIL.imap.host;
+      port = port ?? GMAIL.imap.port;
+    } else if (account.provider === "outlook") {
+      host = host ?? OUTLOOK.imap.host;
+      port = port ?? OUTLOOK.imap.port;
+    } else {
+      return null;
     }
   }
   const username = account.smtpUsername || account.email;
@@ -48,19 +69,89 @@ export interface SendInput {
   subject: string;
   body: string;
   bodyType: "text" | "html" | string;
+  trackingToken?: string;
+  unsubscribeToken?: string;
+  publicBaseUrl: string;
+  messageId?: string;
+}
+
+export function generateTrackingToken(): string {
+  return randomBytes(18).toString("base64url");
+}
+
+export function buildMessageId(account: AccountWithSecret): string {
+  const local = randomBytes(12).toString("hex");
+  const domain = account.email.split("@")[1] ?? "localhost";
+  return `<${local}@${domain}>`;
+}
+
+const HTML_END_RE = /<\/body\s*>/i;
+
+function injectHtmlFooter(html: string, pixelUrl: string | null, unsubUrl: string | null): string {
+  const footerParts: string[] = [];
+  if (unsubUrl) {
+    footerParts.push(
+      `<div style="margin-top:24px;padding-top:12px;border-top:1px solid #eee;font-size:11px;color:#888;font-family:Arial,sans-serif;">` +
+      `If you'd prefer not to hear from us, <a href="${unsubUrl}" style="color:#888;">unsubscribe here</a>.` +
+      `</div>`,
+    );
+  }
+  if (pixelUrl) {
+    footerParts.push(`<img src="${pixelUrl}" alt="" width="1" height="1" style="display:block;border:0;" />`);
+  }
+  const footer = footerParts.join("");
+  if (!footer) return html;
+  if (HTML_END_RE.test(html)) {
+    return html.replace(HTML_END_RE, `${footer}</body>`);
+  }
+  return html + footer;
+}
+
+function buildTextFooter(text: string, unsubUrl: string | null): string {
+  if (!unsubUrl) return text;
+  return `${text}\n\n---\nTo unsubscribe: ${unsubUrl}\n`;
 }
 
 export async function sendEmail(account: AccountWithSecret, input: SendInput): Promise<{ messageId: string }> {
   const transport = buildTransport(account);
   const fromHeader = account.name ? `"${account.name}" <${account.email}>` : account.email;
   const toHeader = input.toName ? `"${input.toName}" <${input.to}>` : input.to;
-  const info = await transport.sendMail({
+  const pixelUrl = input.trackingToken
+    ? `${input.publicBaseUrl}/api/track/open/${input.trackingToken}.gif`
+    : null;
+  const unsubUrl = input.unsubscribeToken
+    ? `${input.publicBaseUrl}/api/unsubscribe/${input.unsubscribeToken}`
+    : null;
+
+  const isHtml = input.bodyType === "html";
+  const mailOptions: nodemailer.SendMailOptions = {
     from: fromHeader,
     to: toHeader,
     subject: input.subject,
-    ...(input.bodyType === "html" ? { html: input.body } : { text: input.body }),
-  });
+    headers: unsubUrl
+      ? { "List-Unsubscribe": `<${unsubUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }
+      : undefined,
+  };
+  if (input.messageId) mailOptions.messageId = input.messageId;
+
+  if (isHtml) {
+    mailOptions.html = injectHtmlFooter(input.body, pixelUrl, unsubUrl);
+    mailOptions.text = buildTextFooter(stripHtml(input.body), unsubUrl);
+  } else {
+    mailOptions.text = buildTextFooter(input.body, unsubUrl);
+  }
+
+  const info = await transport.sendMail(mailOptions);
   return { messageId: info.messageId };
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+\n/g, "\n")
+    .trim();
 }
 
 export async function verifyTransport(account: AccountWithSecret): Promise<void> {
@@ -75,4 +166,31 @@ export function renderMergeFields(template: string, vars: Record<string, string 
     const v = vars[key];
     return v == null ? "" : String(v);
   });
+}
+
+export function getPublicBaseUrl(): string {
+  const explicit = process.env["PUBLIC_BASE_URL"];
+  if (explicit) return explicit.replace(/\/$/, "");
+  const domains = process.env["REPLIT_DOMAINS"];
+  if (domains) {
+    const first = domains.split(",")[0]?.trim();
+    if (first) return `https://${first}`;
+  }
+  const dev = process.env["REPLIT_DEV_DOMAIN"];
+  if (dev) return `https://${dev}`;
+  return "http://localhost";
+}
+
+/** Classify a nodemailer error as a hard or soft bounce, if possible. */
+export function classifyBounce(err: unknown): "hard" | "soft" | null {
+  if (!err || typeof err !== "object") return null;
+  const e = err as { responseCode?: number; code?: string; response?: string };
+  if (typeof e.responseCode === "number") {
+    if (e.responseCode >= 500 && e.responseCode < 600) return "hard";
+    if (e.responseCode >= 400 && e.responseCode < 500) return "soft";
+  }
+  const resp = (e.response ?? "").toLowerCase();
+  if (/no such user|user unknown|does not exist|user not found|mailbox unavailable|invalid recipient/.test(resp)) return "hard";
+  if (/over quota|mailbox full|temporarily|try again/.test(resp)) return "soft";
+  return null;
 }

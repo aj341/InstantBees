@@ -19,6 +19,10 @@ export const emailAccountsTable = pgTable("email_accounts", {
   smtpPort: integer("smtp_port"),
   smtpUsername: text("smtp_username"),
   smtpPasswordEnc: text("smtp_password_enc"),
+  imapHost: text("imap_host"),
+  imapPort: integer("imap_port"),
+  imapLastUid: integer("imap_last_uid"),
+  lastPolledAt: timestamp("last_polled_at"),
   lastError: text("last_error"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
