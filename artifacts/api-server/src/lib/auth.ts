@@ -50,7 +50,10 @@ export function buildSessionMiddleware(): RequestHandler {
   const store = new PgStore({
     conString: dbUrl,
     tableName: "user_sessions",
-    createTableIfMissing: true,
+    // Table is declared in @workspace/db schema and created via drizzle-kit
+    // push, so we disable connect-pg-simple's auto-create (it reads a
+    // table.sql file that esbuild doesn't include in the production bundle).
+    createTableIfMissing: false,
   });
   if (isUsingDefaultCredentials()) {
     logger.warn(
