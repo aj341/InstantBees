@@ -13,12 +13,14 @@ import {
   useRemoveLeadFromCampaign,
   useLaunchCampaign,
   usePauseCampaign,
+  useListTemplates,
   getGetCampaignQueryKey,
   getGetCampaignAnalyticsQueryKey,
   getListSequencesQueryKey,
   getListCampaignLeadsQueryKey,
   getListCampaignsQueryKey,
   getGetCampaignStatsQueryKey,
+  getListTemplatesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -34,7 +36,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type } from "lucide-react";
+import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type, FileText } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/email-editor/rich-text-editor";
@@ -65,6 +67,9 @@ export default function CampaignDetail() {
   const [editStep, setEditStep] = useState<{ id: number; subject: string; body: string; bodyType: "text" | "html"; delayDays: number } | null>(null);
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+
+  const { data: templates } = useListTemplates({ query: { queryKey: getListTemplatesQueryKey() } });
 
   const { data: campaign, isLoading } = useGetCampaign(id, { query: { enabled: !!id, queryKey: getGetCampaignQueryKey(id) } });
   const { data: analytics } = useGetCampaignAnalytics(id, { query: { enabled: !!id, queryKey: getGetCampaignAnalyticsQueryKey(id) } });
@@ -366,11 +371,61 @@ export default function CampaignDetail() {
         </TabsContent>
       </Tabs>
 
+      {/* Template picker dialog */}
+      <Dialog open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Load from Template</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-96 overflow-y-auto space-y-2">
+            {!templates?.length ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No templates saved yet. Go to <span className="font-medium">Templates</span> in the sidebar to create some.
+              </p>
+            ) : templates.map(t => (
+              <button
+                key={t.id}
+                type="button"
+                className="w-full text-left p-3 rounded-md border border-border hover:bg-accent transition-colors"
+                onClick={() => {
+                  seqForm.setValue("subject", t.subject);
+                  seqForm.setValue("body", t.body);
+                  seqForm.setValue("bodyType", (t.bodyType as "text" | "html") ?? "text");
+                  setTemplatePickerOpen(false);
+                }}
+                data-testid={`pick-template-${t.id}`}
+              >
+                <div className="flex items-center gap-2 mb-0.5">
+                  <p className="text-sm font-medium">{t.name}</p>
+                  <span className="text-[10px] text-muted-foreground border border-border rounded px-1">{t.bodyType}</span>
+                </div>
+                <p className="text-xs text-muted-foreground truncate">{t.subject}</p>
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTemplatePickerOpen(false)}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Sequence step dialog */}
       <Dialog open={seqDialogOpen} onOpenChange={v => { setSeqDialogOpen(v); if (!v) { setEditStep(null); seqForm.reset(); } }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editStep ? "Edit Step" : "Add Sequence Step"}</DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle>{editStep ? "Edit Step" : "Add Sequence Step"}</DialogTitle>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setTemplatePickerOpen(true)}
+                className="mr-6"
+                data-testid="button-load-template"
+              >
+                <FileText className="mr-1.5 h-3.5 w-3.5" /> Load template
+              </Button>
+            </div>
           </DialogHeader>
           <Form {...seqForm}>
             <form onSubmit={seqForm.handleSubmit(onSeqSubmit)} className="space-y-4">

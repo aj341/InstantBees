@@ -559,6 +559,80 @@ export const UpdateInboxMessageResponse = zod.object({
 
 
 /**
+ * @summary List all email templates
+ */
+export const ListTemplatesResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "bodyType": zod.enum(['text', 'html']),
+  "createdAt": zod.string()
+})
+export const ListTemplatesResponse = zod.array(ListTemplatesResponseItem)
+
+
+/**
+ * @summary Create an email template
+ */
+export const CreateTemplateBody = zod.object({
+  "name": zod.string(),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "bodyType": zod.enum(['text', 'html']).optional()
+})
+
+
+/**
+ * @summary Get a single template
+ */
+export const GetTemplateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetTemplateResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "bodyType": zod.enum(['text', 'html']),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Update a template
+ */
+export const UpdateTemplateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateTemplateBody = zod.object({
+  "name": zod.string().optional(),
+  "subject": zod.string().optional(),
+  "body": zod.string().optional(),
+  "bodyType": zod.enum(['text', 'html']).optional()
+})
+
+export const UpdateTemplateResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "bodyType": zod.enum(['text', 'html']),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a template
+ */
+export const DeleteTemplateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
  * @summary Get global analytics summary
  */
 export const GetAnalyticsSummaryResponse = zod.object({

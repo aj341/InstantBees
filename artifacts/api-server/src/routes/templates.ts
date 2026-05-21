@@ -1,0 +1,51 @@
+import { Router, type IRouter } from "express";
+import { eq } from "drizzle-orm";
+import { db, emailTemplatesTable } from "@workspace/db";
+
+const router: IRouter = Router();
+
+// GET /api/templates
+router.get("/templates", async (req, res): Promise<void> => {
+  const all = await db.select().from(emailTemplatesTable).orderBy(emailTemplatesTable.createdAt);
+  res.json(all);
+});
+
+// GET /api/templates/:id
+router.get("/templates/:id", async (req, res): Promise<void> => {
+  const rows = await db.select().from(emailTemplatesTable).where(eq(emailTemplatesTable.id, parseInt(req.params.id, 10)));
+  if (!rows[0]) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Template not found" } }); return; }
+  res.json(rows[0]);
+});
+
+// POST /api/templates
+router.post("/templates", async (req, res): Promise<void> => {
+  const { name, subject, body, bodyType } = req.body ?? {};
+  if (!name || !subject || !body) {
+    res.status(400).json({ error: { code: "INVALID_INPUT", message: "'name', 'subject', and 'body' are required" } });
+    return;
+  }
+  const [row] = await db.insert(emailTemplatesTable).values({ name, subject, body, bodyType: bodyType ?? "text" }).returning();
+  res.status(201).json(row);
+});
+
+// PATCH /api/templates/:id
+router.patch("/templates/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const { name, subject, body, bodyType } = req.body ?? {};
+  const update: Record<string, unknown> = { updatedAt: new Date() };
+  if (name !== undefined) update.name = name;
+  if (subject !== undefined) update.subject = subject;
+  if (body !== undefined) update.body = body;
+  if (bodyType !== undefined) update.bodyType = bodyType;
+  const [row] = await db.update(emailTemplatesTable).set(update).where(eq(emailTemplatesTable.id, id)).returning();
+  if (!row) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Template not found" } }); return; }
+  res.json(row);
+});
+
+// DELETE /api/templates/:id
+router.delete("/templates/:id", async (req, res): Promise<void> => {
+  await db.delete(emailTemplatesTable).where(eq(emailTemplatesTable.id, parseInt(req.params.id, 10)));
+  res.status(204).end();
+});
+
+export default router;

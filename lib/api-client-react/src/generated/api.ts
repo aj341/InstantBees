@@ -30,10 +30,12 @@ import type {
   CampaignLeadsInput,
   CampaignStatsOverview,
   CampaignUpdate,
+  CreateTemplateInput,
   DailyStats,
   EmailAccount,
   EmailAccountInput,
   EmailAccountUpdate,
+  EmailTemplate,
   HealthStatus,
   InboxMessage,
   InboxMessageUpdate,
@@ -42,7 +44,8 @@ import type {
   LeadUpdate,
   SequenceStep,
   SequenceStepInput,
-  SequenceStepUpdate
+  SequenceStepUpdate,
+  UpdateTemplateInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -2187,6 +2190,373 @@ export const useUpdateInboxMessage = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateInboxMessageMutationOptions(options));
+    }
+
+export const getListTemplatesUrl = () => {
+
+
+
+
+  return `/api/templates`
+}
+
+/**
+ * @summary List all email templates
+ */
+export const listTemplates = async ( options?: RequestInit): Promise<EmailTemplate[]> => {
+
+  return customFetch<EmailTemplate[]>(getListTemplatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTemplatesQueryKey = () => {
+    return [
+    `/api/templates`
+    ] as const;
+    }
+
+
+export const getListTemplatesQueryOptions = <TData = Awaited<ReturnType<typeof listTemplates>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTemplatesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTemplates>>> = ({ signal }) => listTemplates({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTemplates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTemplatesQueryResult = NonNullable<Awaited<ReturnType<typeof listTemplates>>>
+export type ListTemplatesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all email templates
+ */
+
+export function useListTemplates<TData = Awaited<ReturnType<typeof listTemplates>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTemplatesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateTemplateUrl = () => {
+
+
+
+
+  return `/api/templates`
+}
+
+/**
+ * @summary Create an email template
+ */
+export const createTemplate = async (createTemplateInput: CreateTemplateInput, options?: RequestInit): Promise<EmailTemplate> => {
+
+  return customFetch<EmailTemplate>(getCreateTemplateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createTemplateInput,)
+  }
+);}
+
+
+
+
+export const getCreateTemplateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTemplate>>, TError,{data: BodyType<CreateTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTemplate>>, TError,{data: BodyType<CreateTemplateInput>}, TContext> => {
+
+const mutationKey = ['createTemplate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTemplate>>, {data: BodyType<CreateTemplateInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTemplate(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTemplateMutationResult = NonNullable<Awaited<ReturnType<typeof createTemplate>>>
+    export type CreateTemplateMutationBody = BodyType<CreateTemplateInput>
+    export type CreateTemplateMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create an email template
+ */
+export const useCreateTemplate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTemplate>>, TError,{data: BodyType<CreateTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTemplate>>,
+        TError,
+        {data: BodyType<CreateTemplateInput>},
+        TContext
+      > => {
+      return useMutation(getCreateTemplateMutationOptions(options));
+    }
+
+export const getGetTemplateUrl = (id: number,) => {
+
+
+
+
+  return `/api/templates/${id}`
+}
+
+/**
+ * @summary Get a single template
+ */
+export const getTemplate = async (id: number, options?: RequestInit): Promise<EmailTemplate> => {
+
+  return customFetch<EmailTemplate>(getGetTemplateUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTemplateQueryKey = (id: number,) => {
+    return [
+    `/api/templates/${id}`
+    ] as const;
+    }
+
+
+export const getGetTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getTemplate>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTemplateQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTemplate>>> = ({ signal }) => getTemplate(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTemplate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getTemplate>>>
+export type GetTemplateQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a single template
+ */
+
+export function useGetTemplate<TData = Awaited<ReturnType<typeof getTemplate>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTemplateQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateTemplateUrl = (id: number,) => {
+
+
+
+
+  return `/api/templates/${id}`
+}
+
+/**
+ * @summary Update a template
+ */
+export const updateTemplate = async (id: number,
+    updateTemplateInput: UpdateTemplateInput, options?: RequestInit): Promise<EmailTemplate> => {
+
+  return customFetch<EmailTemplate>(getUpdateTemplateUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateTemplateInput,)
+  }
+);}
+
+
+
+
+export const getUpdateTemplateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTemplate>>, TError,{id: number;data: BodyType<UpdateTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateTemplate>>, TError,{id: number;data: BodyType<UpdateTemplateInput>}, TContext> => {
+
+const mutationKey = ['updateTemplate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateTemplate>>, {id: number;data: BodyType<UpdateTemplateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateTemplate(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateTemplateMutationResult = NonNullable<Awaited<ReturnType<typeof updateTemplate>>>
+    export type UpdateTemplateMutationBody = BodyType<UpdateTemplateInput>
+    export type UpdateTemplateMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a template
+ */
+export const useUpdateTemplate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTemplate>>, TError,{id: number;data: BodyType<UpdateTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateTemplate>>,
+        TError,
+        {id: number;data: BodyType<UpdateTemplateInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateTemplateMutationOptions(options));
+    }
+
+export const getDeleteTemplateUrl = (id: number,) => {
+
+
+
+
+  return `/api/templates/${id}`
+}
+
+/**
+ * @summary Delete a template
+ */
+export const deleteTemplate = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteTemplateUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteTemplateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTemplate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteTemplate>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteTemplate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTemplate>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteTemplate(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteTemplateMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTemplate>>>
+
+    export type DeleteTemplateMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a template
+ */
+export const useDeleteTemplate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTemplate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteTemplate>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteTemplateMutationOptions(options));
     }
 
 export const getGetAnalyticsSummaryUrl = () => {

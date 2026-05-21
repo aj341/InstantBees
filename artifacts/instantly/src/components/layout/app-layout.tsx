@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Megaphone, Users, Mail, Inbox, BarChart } from "lucide-react";
+import { LayoutDashboard, Megaphone, Users, Mail, Inbox, BarChart, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: "/accounts", label: "Accounts", icon: Mail },
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/analytics", label: "Analytics", icon: BarChart },
+  { href: "/templates", label: "Templates", icon: FileText },
 ];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {

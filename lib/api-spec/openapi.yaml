@@ -22,6 +22,8 @@ tags:
     description: Unified inbox
   - name: analytics
     description: Analytics and reporting
+  - name: templates
+    description: Email template management
 
 paths:
   /healthz:
@@ -586,6 +588,95 @@ paths:
 
   # ── Analytics ─────────────────────────────────────────────────────────────────
 
+  # ── Templates ─────────────────────────────────────────────────────────────────
+
+  /templates:
+    get:
+      operationId: listTemplates
+      tags: [templates]
+      summary: List all email templates
+      responses:
+        "200":
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmailTemplate"
+    post:
+      operationId: createTemplate
+      tags: [templates]
+      summary: Create an email template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTemplateInput"
+      responses:
+        "201":
+          description: Created template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailTemplate"
+
+  /templates/{id}:
+    get:
+      operationId: getTemplate
+      tags: [templates]
+      summary: Get a single template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailTemplate"
+    patch:
+      operationId: updateTemplate
+      tags: [templates]
+      summary: Update a template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTemplateInput"
+      responses:
+        "200":
+          description: Updated template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailTemplate"
+    delete:
+      operationId: deleteTemplate
+      tags: [templates]
+      summary: Delete a template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
   /analytics/summary:
     get:
       operationId: getAnalyticsSummary
@@ -997,6 +1088,53 @@ components:
           type: boolean
         isFavorite:
           type: boolean
+
+    # ── Templates ─────────────────────────────────────────────────────────────
+
+    EmailTemplate:
+      type: object
+      required: [id, name, subject, body, bodyType, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        bodyType:
+          type: string
+          enum: [text, html]
+        createdAt:
+          type: string
+
+    CreateTemplateInput:
+      type: object
+      required: [name, subject, body]
+      properties:
+        name:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        bodyType:
+          type: string
+          enum: [text, html]
+
+    UpdateTemplateInput:
+      type: object
+      properties:
+        name:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        bodyType:
+          type: string
+          enum: [text, html]
 
     # ── Analytics ─────────────────────────────────────────────────────────────
 

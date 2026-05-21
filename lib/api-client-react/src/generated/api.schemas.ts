@@ -315,6 +315,53 @@ export interface InboxMessageUpdate {
   isFavorite?: boolean;
 }
 
+export type EmailTemplateBodyType = typeof EmailTemplateBodyType[keyof typeof EmailTemplateBodyType];
+
+
+export const EmailTemplateBodyType = {
+  text: 'text',
+  html: 'html',
+} as const;
+
+export interface EmailTemplate {
+  id: number;
+  name: string;
+  subject: string;
+  body: string;
+  bodyType: EmailTemplateBodyType;
+  createdAt: string;
+}
+
+export type CreateTemplateInputBodyType = typeof CreateTemplateInputBodyType[keyof typeof CreateTemplateInputBodyType];
+
+
+export const CreateTemplateInputBodyType = {
+  text: 'text',
+  html: 'html',
+} as const;
+
+export interface CreateTemplateInput {
+  name: string;
+  subject: string;
+  body: string;
+  bodyType?: CreateTemplateInputBodyType;
+}
+
+export type UpdateTemplateInputBodyType = typeof UpdateTemplateInputBodyType[keyof typeof UpdateTemplateInputBodyType];
+
+
+export const UpdateTemplateInputBodyType = {
+  text: 'text',
+  html: 'html',
+} as const;
+
+export interface UpdateTemplateInput {
+  name?: string;
+  subject?: string;
+  body?: string;
+  bodyType?: UpdateTemplateInputBodyType;
+}
+
 export interface AnalyticsSummary {
   totalSent: number;
   totalOpened: number;
