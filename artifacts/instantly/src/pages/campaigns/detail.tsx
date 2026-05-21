@@ -13,6 +13,7 @@ import {
   useRemoveLeadFromCampaign,
   useLaunchCampaign,
   usePauseCampaign,
+  useDeleteCampaign,
   useListTemplates,
   useListAccounts,
   useSendTestStep,
@@ -37,6 +38,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type, FileText, Send, Braces } from "lucide-react";
@@ -75,6 +86,7 @@ export default function CampaignDetail() {
   const [testDialog, setTestDialog] = useState<{ stepId: number; subject: string } | null>(null);
   const [testAccountId, setTestAccountId] = useState<number | null>(null);
   const [testToEmail, setTestToEmail] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { data: templates } = useListTemplates({ query: { queryKey: getListTemplatesQueryKey() } });
   const { data: accounts } = useListAccounts({ query: { queryKey: getListAccountsQueryKey() } });
@@ -144,6 +156,18 @@ export default function CampaignDetail() {
         queryClient.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       },
       onError: () => toast({ title: "Failed to pause", variant: "destructive" }),
+    },
+  });
+
+  const remove = useDeleteCampaign({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Campaign deleted" });
+        queryClient.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetCampaignStatsQueryKey() });
+        setLocation("/campaigns");
+      },
+      onError: () => toast({ title: "Failed to delete campaign", variant: "destructive" }),
     },
   });
 
@@ -268,8 +292,38 @@ export default function CampaignDetail() {
               <Play className="mr-2 h-4 w-4" /> Launch
             </Button>
           )}
+          <Button
+            variant="outline"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => setConfirmDelete(true)}
+            data-testid="button-delete-campaign"
+          >
+            <Trash2 className="mr-2 h-4 w-4" /> Delete
+          </Button>
         </div>
       </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this campaign?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently deletes <span className="font-medium">{campaign.name}</span> along with its sequence steps,
+              send jobs, lead assignments, replies, and unsubscribe tokens. Leads themselves stay in your database.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-campaign">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => remove.mutate({ id })}
+              data-testid="button-confirm-delete-campaign"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Tabs defaultValue="overview">
         <TabsList>

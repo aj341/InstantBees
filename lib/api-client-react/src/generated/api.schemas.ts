@@ -5,6 +5,29 @@
  * Instantly.ai clone API
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Required confirmation phrase. Prevents accidental wipes.
+ */
+export type ResetRequestConfirm = typeof ResetRequestConfirm[keyof typeof ResetRequestConfirm];
+
+
+export const ResetRequestConfirm = {
+  DELETE_ALL_DATA: 'DELETE_ALL_DATA',
+} as const;
+
+export interface ResetRequest {
+  /** Required confirmation phrase. Prevents accidental wipes. */
+  confirm: ResetRequestConfirm;
+  /** Also delete configured email accounts. */
+  includeAccounts?: boolean;
+  /** Also delete saved email templates. */
+  includeTemplates?: boolean;
+}
+
+export interface ResetResult {
+  ok: boolean;
+}
+
 export interface HealthStatus {
   status: string;
 }

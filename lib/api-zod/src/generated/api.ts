@@ -340,6 +340,24 @@ export const CreateLeadBody = zod.object({
 
 
 /**
+ * Destructive. Clears campaigns, leads, sequences, lists, send jobs, inbox messages,
+unsubscribes, and daily stats. Email accounts and templates are preserved unless explicitly
+included via the request body.
+
+ * @summary Wipe all campaigns, leads, send jobs, inbox messages, and analytics
+ */
+export const ResetAllDataBody = zod.object({
+  "confirm": zod.enum(['DELETE_ALL_DATA']).describe('Required confirmation phrase. Prevents accidental wipes.'),
+  "includeAccounts": zod.boolean().optional().describe('Also delete configured email accounts.'),
+  "includeTemplates": zod.boolean().optional().describe('Also delete saved email templates.')
+})
+
+export const ResetAllDataResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
  * Three accepted payload shapes:
   * `application/json` with `{ leads: [...] }` — explicit lead objects.
   * `application/json` with `{ csvText: "..." }` — CSV as a string field.

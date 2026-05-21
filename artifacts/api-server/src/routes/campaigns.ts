@@ -94,14 +94,17 @@ router.delete("/campaigns/:id", async (req, res): Promise<void> => {
     return;
   }
   const cid = params.data.id;
-  // Cascade — these tables don't have FK constraints declared in Drizzle, so we clean up by hand
-  // so a deleted campaign doesn't leave orphan rows skewing analytics.
-  await db.delete(emailSendJobsTable).where(eq(emailSendJobsTable.campaignId, cid));
-  await db.delete(sequenceStepsTable).where(eq(sequenceStepsTable.campaignId, cid));
-  await db.delete(campaignLeadsTable).where(eq(campaignLeadsTable.campaignId, cid));
-  await db.delete(unsubscribesTable).where(eq(unsubscribesTable.campaignId, cid));
-  await db.delete(inboxMessagesTable).where(eq(inboxMessagesTable.campaignId, cid));
-  const [campaign] = await db.delete(campaignsTable).where(eq(campaignsTable.id, cid)).returning();
+  // Cascade — these tables don't have FK constraints declared in Drizzle, so we clean up by hand.
+  // Wrap in a transaction so concurrent worker activity can't leave orphans.
+  const campaign = await db.transaction(async (tx) => {
+    await tx.delete(emailSendJobsTable).where(eq(emailSendJobsTable.campaignId, cid));
+    await tx.delete(sequenceStepsTable).where(eq(sequenceStepsTable.campaignId, cid));
+    await tx.delete(campaignLeadsTable).where(eq(campaignLeadsTable.campaignId, cid));
+    await tx.delete(unsubscribesTable).where(eq(unsubscribesTable.campaignId, cid));
+    await tx.delete(inboxMessagesTable).where(eq(inboxMessagesTable.campaignId, cid));
+    const [row] = await tx.delete(campaignsTable).where(eq(campaignsTable.id, cid)).returning();
+    return row;
+  });
   if (!campaign) {
     res.status(404).json({ error: "Campaign not found" });
     return;

@@ -44,6 +44,8 @@ import type {
   Lead,
   LeadInput,
   LeadUpdate,
+  ResetRequest,
+  ResetResult,
   SendTestStepInput,
   SequenceStep,
   SequenceStepInput,
@@ -1317,6 +1319,81 @@ export const useCreateLead = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateLeadMutationOptions(options));
+    }
+
+export const getResetAllDataUrl = () => {
+
+
+
+
+  return `/api/admin/reset`
+}
+
+/**
+ * Destructive. Clears campaigns, leads, sequences, lists, send jobs, inbox messages,
+unsubscribes, and daily stats. Email accounts and templates are preserved unless explicitly
+included via the request body.
+
+ * @summary Wipe all campaigns, leads, send jobs, inbox messages, and analytics
+ */
+export const resetAllData = async (resetRequest?: ResetRequest, options?: RequestInit): Promise<ResetResult> => {
+
+  return customFetch<ResetResult>(getResetAllDataUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      resetRequest,)
+  }
+);}
+
+
+
+
+export const getResetAllDataMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetAllData>>, TError,{data?: BodyType<ResetRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetAllData>>, TError,{data?: BodyType<ResetRequest>}, TContext> => {
+
+const mutationKey = ['resetAllData'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetAllData>>, {data?: BodyType<ResetRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resetAllData(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetAllDataMutationResult = NonNullable<Awaited<ReturnType<typeof resetAllData>>>
+    export type ResetAllDataMutationBody = BodyType<ResetRequest> | undefined
+    export type ResetAllDataMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Wipe all campaigns, leads, send jobs, inbox messages, and analytics
+ */
+export const useResetAllData = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetAllData>>, TError,{data?: BodyType<ResetRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resetAllData>>,
+        TError,
+        {data?: BodyType<ResetRequest>},
+        TContext
+      > => {
+      return useMutation(getResetAllDataMutationOptions(options));
     }
 
 export const getBulkImportLeadsUrl = (params?: BulkImportLeadsParams,) => {

@@ -351,6 +351,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/Lead"
 
+  /admin/reset:
+    post:
+      operationId: resetAllData
+      tags: [admin]
+      summary: Wipe all campaigns, leads, send jobs, inbox messages, and analytics
+      description: |
+        Destructive. Clears campaigns, leads, sequences, lists, send jobs, inbox messages,
+        unsubscribes, and daily stats. Email accounts and templates are preserved unless explicitly
+        included via the request body.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetRequest"
+      responses:
+        "200":
+          description: Reset complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetResult"
+
   /leads/bulk:
     post:
       operationId: bulkImportLeads
@@ -765,6 +788,26 @@ paths:
 
 components:
   schemas:
+    ResetRequest:
+      type: object
+      required: [confirm]
+      properties:
+        confirm:
+          type: string
+          enum: ["DELETE_ALL_DATA"]
+          description: Required confirmation phrase. Prevents accidental wipes.
+        includeAccounts:
+          type: boolean
+          description: Also delete configured email accounts.
+        includeTemplates:
+          type: boolean
+          description: Also delete saved email templates.
+    ResetResult:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
     HealthStatus:
       type: object
       properties:
