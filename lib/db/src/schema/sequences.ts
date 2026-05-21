@@ -8,6 +8,7 @@ export const sequenceStepsTable = pgTable("sequence_steps", {
   stepNumber: integer("step_number").notNull().default(1),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
+  bodyType: text("body_type").notNull().default("text"),
   delayDays: integer("delay_days").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

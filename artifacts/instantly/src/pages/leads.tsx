@@ -1,5 +1,8 @@
-import { useState } from "react";
-import { useListLeads, useCreateLead, useDeleteLead, getListLeadsQueryKey } from "@workspace/api-client-react";
+import { useState, useRef } from "react";
+import {
+  useListLeads, useCreateLead, useDeleteLead, useBulkImportLeads,
+  getListLeadsQueryKey,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,11 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, MoreHorizontal, Trash2, Search, Users } from "lucide-react";
+import { Plus, MoreHorizontal, Trash2, Search, Users, Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
 
 const schema = z.object({
   email: z.string().email("Valid email required"),
@@ -34,6 +38,10 @@ const STATUS_COLORS: Record<string, string> = {
 export default function Leads() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
+  const [csvOpen, setCsvOpen] = useState(false);
+  const [csvText, setCsvText] = useState("");
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; total: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const { data: leads, isLoading } = useListLeads();
 
@@ -46,6 +54,16 @@ export default function Leads() {
         form.reset();
       },
       onError: () => toast({ title: "Failed to add lead", variant: "destructive" }),
+    },
+  });
+
+  const bulkImport = useBulkImportLeads({
+    mutation: {
+      onSuccess: (result) => {
+        queryClient.invalidateQueries({ queryKey: getListLeadsQueryKey() });
+        setImportResult(result);
+      },
+      onError: () => toast({ title: "Import failed", variant: "destructive" }),
     },
   });
 
@@ -68,6 +86,28 @@ export default function Leads() {
     create.mutate({ data: values });
   }
 
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      setCsvText(evt.target?.result as string ?? "");
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  function handleCsvImport() {
+    if (!csvText.trim()) { toast({ title: "Paste or upload a CSV first", variant: "destructive" }); return; }
+    bulkImport.mutate({ data: { leads: [], csvText } });
+  }
+
+  function closeCsvDialog() {
+    setCsvOpen(false);
+    setCsvText("");
+    setImportResult(null);
+  }
+
   const filtered = leads?.filter(l =>
     l.email.toLowerCase().includes(search.toLowerCase()) ||
     l.firstName?.toLowerCase().includes(search.toLowerCase()) ||
@@ -82,9 +122,14 @@ export default function Leads() {
           <h1 className="text-3xl font-bold tracking-tight">Leads</h1>
           <p className="text-sm text-muted-foreground mt-1">{leads?.length ?? 0} total leads</p>
         </div>
-        <Button onClick={() => setOpen(true)} data-testid="button-add-lead">
-          <Plus className="mr-2 h-4 w-4" /> Add Lead
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setCsvOpen(true)} data-testid="button-import-csv">
+            <Upload className="mr-2 h-4 w-4" /> Import CSV
+          </Button>
+          <Button onClick={() => setOpen(true)} data-testid="button-add-lead">
+            <Plus className="mr-2 h-4 w-4" /> Add Lead
+          </Button>
+        </div>
       </div>
 
       <div className="relative">
@@ -155,6 +200,7 @@ export default function Leads() {
         </Table>
       </div>
 
+      {/* Add single lead dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
@@ -203,6 +249,97 @@ export default function Leads() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* CSV Import dialog */}
+      <Dialog open={csvOpen} onOpenChange={closeCsvDialog}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Import Leads from CSV</DialogTitle>
+            <DialogDescription>
+              Upload a CSV file or paste CSV text. Expected columns:{" "}
+              <code className="text-xs bg-muted px-1 rounded">email</code>,{" "}
+              <code className="text-xs bg-muted px-1 rounded">firstName</code>,{" "}
+              <code className="text-xs bg-muted px-1 rounded">lastName</code>,{" "}
+              <code className="text-xs bg-muted px-1 rounded">company</code>,{" "}
+              <code className="text-xs bg-muted px-1 rounded">title</code>.
+              Duplicates are skipped automatically.
+            </DialogDescription>
+          </DialogHeader>
+
+          {importResult ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  Import complete
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="rounded-md bg-card p-3">
+                    <p className="text-2xl font-bold text-green-500">{importResult.imported}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Imported</p>
+                  </div>
+                  <div className="rounded-md bg-card p-3">
+                    <p className="text-2xl font-bold text-yellow-500">{importResult.skipped}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Skipped</p>
+                  </div>
+                  <div className="rounded-md bg-card p-3">
+                    <p className="text-2xl font-bold">{importResult.total}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Total</p>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={closeCsvDialog} data-testid="button-close-import">Done</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  ref={fileInputRef}
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  data-testid="input-csv-file"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="button-choose-file"
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  {csvText ? "File loaded — replace" : "Choose CSV file"}
+                </Button>
+              </div>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">or paste CSV</span></div>
+              </div>
+              <Textarea
+                placeholder={"email,firstName,lastName,company,title\njohn@acme.com,John,Smith,Acme,CEO"}
+                rows={8}
+                value={csvText}
+                onChange={e => setCsvText(e.target.value)}
+                className="font-mono text-xs"
+                data-testid="input-csv-text"
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={closeCsvDialog} data-testid="button-cancel-import">Cancel</Button>
+                <Button
+                  onClick={handleCsvImport}
+                  disabled={bulkImport.isPending || !csvText.trim()}
+                  data-testid="button-submit-import"
+                >
+                  {bulkImport.isPending ? "Importing..." : "Import Leads"}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

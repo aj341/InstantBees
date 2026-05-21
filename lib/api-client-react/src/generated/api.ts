@@ -22,6 +22,8 @@ import type {
 import type {
   AddLeadsToCampaign200,
   AnalyticsSummary,
+  BulkImportResult,
+  BulkLeadImport,
   Campaign,
   CampaignAnalytics,
   CampaignInput,
@@ -1235,6 +1237,77 @@ export const useCreateLead = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateLeadMutationOptions(options));
+    }
+
+export const getBulkImportLeadsUrl = () => {
+
+
+
+
+  return `/api/leads/bulk`
+}
+
+/**
+ * @summary Bulk import leads from a JSON array (also accepts CSV text)
+ */
+export const bulkImportLeads = async (bulkLeadImport: BulkLeadImport, options?: RequestInit): Promise<BulkImportResult> => {
+
+  return customFetch<BulkImportResult>(getBulkImportLeadsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bulkLeadImport,)
+  }
+);}
+
+
+
+
+export const getBulkImportLeadsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkImportLeads>>, TError,{data: BodyType<BulkLeadImport>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkImportLeads>>, TError,{data: BodyType<BulkLeadImport>}, TContext> => {
+
+const mutationKey = ['bulkImportLeads'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkImportLeads>>, {data: BodyType<BulkLeadImport>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  bulkImportLeads(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkImportLeadsMutationResult = NonNullable<Awaited<ReturnType<typeof bulkImportLeads>>>
+    export type BulkImportLeadsMutationBody = BodyType<BulkLeadImport>
+    export type BulkImportLeadsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Bulk import leads from a JSON array (also accepts CSV text)
+ */
+export const useBulkImportLeads = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkImportLeads>>, TError,{data: BodyType<BulkLeadImport>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkImportLeads>>,
+        TError,
+        {data: BodyType<BulkLeadImport>},
+        TContext
+      > => {
+      return useMutation(getBulkImportLeadsMutationOptions(options));
     }
 
 export const getUpdateLeadUrl = (id: number,) => {

@@ -8,6 +8,8 @@
 
 export * from './addLeadsToCampaign200';
 export * from './analyticsSummary';
+export * from './bulkImportResult';
+export * from './bulkLeadImport';
 export * from './campaign';
 export * from './campaignAnalytics';
 export * from './campaignInput';
@@ -33,5 +35,8 @@ export * from './leadStatus';
 export * from './leadUpdate';
 export * from './leadUpdateStatus';
 export * from './sequenceStep';
+export * from './sequenceStepBodyType';
 export * from './sequenceStepInput';
+export * from './sequenceStepInputBodyType';
 export * from './sequenceStepUpdate';
+export * from './sequenceStepUpdateBodyType';

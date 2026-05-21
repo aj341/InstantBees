@@ -81,25 +81,52 @@ export interface CampaignAnalytics {
   bounceRate: number;
 }
 
+export type SequenceStepBodyType = typeof SequenceStepBodyType[keyof typeof SequenceStepBodyType];
+
+
+export const SequenceStepBodyType = {
+  text: 'text',
+  html: 'html',
+} as const;
+
 export interface SequenceStep {
   id: number;
   campaignId: number;
   stepNumber: number;
   subject: string;
   body: string;
+  bodyType: SequenceStepBodyType;
   delayDays: number;
   createdAt: string;
 }
 
+export type SequenceStepInputBodyType = typeof SequenceStepInputBodyType[keyof typeof SequenceStepInputBodyType];
+
+
+export const SequenceStepInputBodyType = {
+  text: 'text',
+  html: 'html',
+} as const;
+
 export interface SequenceStepInput {
   subject: string;
   body: string;
+  bodyType?: SequenceStepInputBodyType;
   delayDays: number;
 }
+
+export type SequenceStepUpdateBodyType = typeof SequenceStepUpdateBodyType[keyof typeof SequenceStepUpdateBodyType];
+
+
+export const SequenceStepUpdateBodyType = {
+  text: 'text',
+  html: 'html',
+} as const;
 
 export interface SequenceStepUpdate {
   subject?: string;
   body?: string;
+  bodyType?: SequenceStepUpdateBodyType;
   delayDays?: number;
 }
 
@@ -161,6 +188,22 @@ export interface LeadUpdate {
   website?: string;
   phone?: string;
   status?: LeadUpdateStatus;
+}
+
+export interface BulkLeadImport {
+  /** Array of lead objects, or pass csvText instead */
+  leads: LeadInput[];
+  /** Raw CSV text (email,firstName,lastName,company,title columns) */
+  csvText?: string;
+  /** Optionally add all imported leads to this campaign */
+  campaignId?: number;
+}
+
+export interface BulkImportResult {
+  imported: number;
+  skipped: number;
+  total: number;
+  leadIds?: number[];
 }
 
 export interface CampaignLeadsInput {

@@ -34,13 +34,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users } from "lucide-react";
+import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "@/hooks/use-toast";
+import { RichTextEditor } from "@/components/email-editor/rich-text-editor";
 
 const seqSchema = z.object({
   subject: z.string().min(1, "Subject required"),
   body: z.string().min(1, "Body required"),
+  bodyType: z.enum(["text", "html"]).default("text"),
   delayDays: z.coerce.number().min(0).default(0),
 });
 
@@ -60,7 +62,7 @@ export default function CampaignDetail() {
   const queryClient = useQueryClient();
 
   const [seqDialogOpen, setSeqDialogOpen] = useState(false);
-  const [editStep, setEditStep] = useState<{ id: number; subject: string; body: string; delayDays: number } | null>(null);
+  const [editStep, setEditStep] = useState<{ id: number; subject: string; body: string; bodyType: "text" | "html"; delayDays: number } | null>(null);
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
 
@@ -153,8 +155,10 @@ export default function CampaignDetail() {
 
   const seqForm = useForm<SeqForm>({
     resolver: zodResolver(seqSchema),
-    defaultValues: { subject: "", body: "", delayDays: 0 },
+    defaultValues: { subject: "", body: "", bodyType: "text", delayDays: 0 },
   });
+
+  const watchedBodyType = seqForm.watch("bodyType");
 
   function onSeqSubmit(values: SeqForm) {
     if (editStep) {
@@ -164,9 +168,9 @@ export default function CampaignDetail() {
     }
   }
 
-  function openEdit(step: { id: number; subject: string; body: string; delayDays: number }) {
+  function openEdit(step: { id: number; subject: string; body: string; bodyType: "text" | "html"; delayDays: number }) {
     setEditStep(step);
-    seqForm.reset({ subject: step.subject, body: step.body, delayDays: step.delayDays });
+    seqForm.reset({ subject: step.subject, body: step.body, bodyType: step.bodyType ?? "text", delayDays: step.delayDays });
     setSeqDialogOpen(true);
   }
 
@@ -284,16 +288,25 @@ export default function CampaignDetail() {
                         <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
                           {idx + 1}
                         </div>
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">{step.subject}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium truncate">{step.subject}</p>
+                            {step.bodyType === "html" && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">HTML</Badge>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {idx === 0 ? "Day 0 (initial)" : `+${step.delayDays} day${step.delayDays !== 1 ? "s" : ""} after previous step`}
                           </p>
-                          <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{step.body}</p>
+                          <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                            {step.bodyType === "html"
+                              ? step.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+                              : step.body}
+                          </p>
                         </div>
                       </div>
                       <div className="flex gap-1 shrink-0">
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(step)} data-testid={`button-edit-step-${step.id}`}>
+                        <Button variant="ghost" size="icon" onClick={() => openEdit({ ...step, bodyType: (step.bodyType ?? "text") as "text" | "html" })} data-testid={`button-edit-step-${step.id}`}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => deleteSeq.mutate({ id, stepId: step.id })} data-testid={`button-delete-step-${step.id}`}>
@@ -355,7 +368,7 @@ export default function CampaignDetail() {
 
       {/* Sequence step dialog */}
       <Dialog open={seqDialogOpen} onOpenChange={v => { setSeqDialogOpen(v); if (!v) { setEditStep(null); seqForm.reset(); } }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editStep ? "Edit Step" : "Add Sequence Step"}</DialogTitle>
           </DialogHeader>
@@ -368,20 +381,57 @@ export default function CampaignDetail() {
                   <FormMessage />
                 </FormItem>
               )} />
+
+              {/* Body type toggle */}
+              <FormField control={seqForm.control} name="bodyType" render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Body</FormLabel>
+                    <div className="flex items-center gap-1 rounded-md border border-border bg-muted/30 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => field.onChange("text")}
+                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${field.value === "text" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                        data-testid="toggle-body-text"
+                      >
+                        <Type className="h-3 w-3" /> Plain Text
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => field.onChange("html")}
+                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${field.value === "html" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                        data-testid="toggle-body-html"
+                      >
+                        <Code2 className="h-3 w-3" /> Rich HTML
+                      </button>
+                    </div>
+                  </div>
+                </FormItem>
+              )} />
+
               <FormField control={seqForm.control} name="body" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Body</FormLabel>
                   <FormControl>
-                    <Textarea
-                      placeholder="Hi {{firstName}},&#10;&#10;..."
-                      rows={6}
-                      data-testid="input-step-body"
-                      {...field}
-                    />
+                    {watchedBodyType === "html" ? (
+                      <RichTextEditor
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Write your HTML email here..."
+                        data-testid="input-step-body"
+                      />
+                    ) : (
+                      <Textarea
+                        placeholder={"Hi {{firstName}},\n\n..."}
+                        rows={7}
+                        data-testid="input-step-body"
+                        {...field}
+                      />
+                    )}
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
+
               <FormField control={seqForm.control} name="delayDays" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Delay (days after previous step)</FormLabel>

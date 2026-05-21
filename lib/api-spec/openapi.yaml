@@ -327,6 +327,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/Lead"
 
+  /leads/bulk:
+    post:
+      operationId: bulkImportLeads
+      tags: [leads]
+      summary: Bulk import leads from a JSON array (also accepts CSV text)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkLeadImport"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkImportResult"
+
   /leads/{id}:
     patch:
       operationId: updateLead
@@ -724,7 +743,7 @@ components:
 
     SequenceStep:
       type: object
-      required: [id, campaignId, stepNumber, subject, body, delayDays, createdAt]
+      required: [id, campaignId, stepNumber, subject, body, bodyType, delayDays, createdAt]
       properties:
         id:
           type: integer
@@ -736,6 +755,9 @@ components:
           type: string
         body:
           type: string
+        bodyType:
+          type: string
+          enum: [text, html]
         delayDays:
           type: integer
         createdAt:
@@ -749,6 +771,9 @@ components:
           type: string
         body:
           type: string
+        bodyType:
+          type: string
+          enum: [text, html]
         delayDays:
           type: integer
 
@@ -759,6 +784,9 @@ components:
           type: string
         body:
           type: string
+        bodyType:
+          type: string
+          enum: [text, html]
         delayDays:
           type: integer
 
@@ -829,6 +857,37 @@ components:
         status:
           type: string
           enum: [active, unsubscribed, bounced, replied]
+
+    BulkLeadImport:
+      type: object
+      required: [leads]
+      properties:
+        leads:
+          type: array
+          description: Array of lead objects, or pass csvText instead
+          items:
+            $ref: "#/components/schemas/LeadInput"
+        csvText:
+          type: string
+          description: Raw CSV text (email,firstName,lastName,company,title columns)
+        campaignId:
+          type: integer
+          description: Optionally add all imported leads to this campaign
+
+    BulkImportResult:
+      type: object
+      required: [imported, skipped, total]
+      properties:
+        imported:
+          type: integer
+        skipped:
+          type: integer
+        total:
+          type: integer
+        leadIds:
+          type: array
+          items:
+            type: integer
 
     CampaignLeadsInput:
       type: object

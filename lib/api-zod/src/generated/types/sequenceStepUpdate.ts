@@ -5,9 +5,11 @@
  * Instantly.ai clone API
  * OpenAPI spec version: 0.1.0
  */
+import type { SequenceStepUpdateBodyType } from './sequenceStepUpdateBodyType';
 
 export interface SequenceStepUpdate {
   subject?: string;
   body?: string;
+  bodyType?: SequenceStepUpdateBodyType;
   delayDays?: number;
 }

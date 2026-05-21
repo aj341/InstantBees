@@ -1,0 +1,69 @@
+# Replit prompt — give Claude operational access to my Instantly clone
+
+Copy everything inside the code block below into Replit's AI agent.
+
+---
+
+```
+You are working inside my existing app: a self-hosted clone of Instantly.ai (a cold-email sending platform) built on Replit. I want to let an external AI assistant (Claude) operate this app programmatically — upload contact lists, manage email templates, create and control campaigns, and read analytics. Build the two layers below WITHOUT breaking the existing UI or database. All work should be additive.
+
+STEP 0 — INSPECT FIRST
+Before writing anything, read the existing codebase and tell me, in a short summary:
+- The framework and language (e.g. Node/Express, Python/Flask, Next.js).
+- The database and the current data models (contacts, lists, templates, campaigns, sequences, mailboxes, sending settings, events/stats).
+- Any HTTP routes that already exist.
+Then build the rest around what's actually there. Do not assume models that don't exist — adapt the spec below to my real schema.
+
+PART 1 — REST API WITH API-KEY AUTH
+Expose a clean, documented JSON REST API for the resources below. Reuse existing routes where they exist; add the ones that are missing. Namespace everything under /api/v1/.
+
+Authentication:
+- Generate one strong random API key and store it as a Replit Secret named CLAUDE_API_KEY. Do not hardcode it.
+- Require the header "Authorization: Bearer <key>" on every /api/v1 request. Reject missing/invalid keys with 401.
+- Add the validation as middleware so it applies to all API and MCP traffic.
+
+Resources and endpoints (adapt names to my schema):
+- Contacts & lists: create a list; list all lists; bulk-upload contacts to a list (accept JSON array AND CSV); list/search contacts; update a contact; delete a contact. Bulk upload must dedupe by email and report how many were added vs skipped.
+- Templates: create, list, get, update, delete email templates. Support variable placeholders (e.g. {{first_name}}, {{company}}).
+- Campaigns / sequences: create a campaign; list campaigns; get one campaign; attach a contact list to a campaign; define sequence steps (subject, body/template, delay between steps); start, pause, and stop a campaign.
+- Sending controls: read and set per-mailbox daily sending limits and ramp-up; list connected sending mailboxes/accounts and their status.
+- Analytics: per-campaign stats (sent, delivered, bounced, opened, replied, positive replies) and per-step breakdown.
+
+API conventions:
+- JSON request/response, consistent error shape { "error": { "code": ..., "message": ... } }.
+- Pagination on all list endpoints (limit + offset or cursor).
+- Validate input and return 400 with a clear message on bad data.
+
+PART 2 — REMOTE MCP SERVER
+Build a Model Context Protocol (MCP) server, hosted on this same Replit deployment, that Claude can connect to as a custom remote connector. Requirements:
+- Use a standard MCP framework — Python: FastMCP; or Node/TypeScript: @modelcontextprotocol/sdk.
+- Use the streamable HTTP transport (remote MCP), exposed at a public path such as /mcp on the deployment's public URL.
+- The MCP server calls the Part 1 REST API internally using CLAUDE_API_KEY, and also requires the same bearer key from incoming MCP connections (so only I can connect).
+- Expose these MCP tools, each wrapping the matching API endpoint, with clear descriptions and typed parameters:
+  - upload_contacts (list_id, contacts[] or CSV text) — returns added/skipped counts
+  - create_list (name) ; list_lists ()
+  - list_contacts (list_id?, search?, limit?, offset?) ; update_contact ; delete_contact
+  - create_template ; list_templates ; get_template ; update_template ; delete_template
+  - create_campaign ; list_campaigns ; get_campaign ; attach_list_to_campaign ; set_sequence_steps
+  - start_campaign ; pause_campaign ; stop_campaign
+  - list_mailboxes ; set_sending_limits
+  - get_campaign_stats (campaign_id)
+- Each tool returns concise structured JSON, not raw HTML.
+
+DELIVERABLES — print these clearly at the end so I can copy them:
+1. The public MCP endpoint URL (e.g. https://<my-app>.replit.app/mcp).
+2. The value of CLAUDE_API_KEY (show it once so I can copy it).
+3. A short list of every REST endpoint and every MCP tool you created, with one-line descriptions.
+4. Confirmation that the existing UI and database still work unchanged.
+
+SECURITY:
+- Never log the API key.
+- The key is the only credential; treat any request without it as unauthorized.
+- Keep all of this additive — do not modify or migrate existing data.
+```
+
+---
+
+## After Replit finishes
+
+It will hand you two things: the **MCP URL** and the **API key**. Paste both back to me here. I'll add the server as a custom connector and confirm I can see your contacts, templates, and campaigns before we do anything live.

@@ -218,6 +218,7 @@ export const ListSequencesResponseItem = zod.object({
   "stepNumber": zod.number(),
   "subject": zod.string(),
   "body": zod.string(),
+  "bodyType": zod.enum(['text', 'html']),
   "delayDays": zod.number(),
   "createdAt": zod.string()
 })
@@ -234,6 +235,7 @@ export const CreateSequenceParams = zod.object({
 export const CreateSequenceBody = zod.object({
   "subject": zod.string(),
   "body": zod.string(),
+  "bodyType": zod.enum(['text', 'html']).optional(),
   "delayDays": zod.number()
 })
 
@@ -249,6 +251,7 @@ export const UpdateSequenceParams = zod.object({
 export const UpdateSequenceBody = zod.object({
   "subject": zod.string().optional(),
   "body": zod.string().optional(),
+  "bodyType": zod.enum(['text', 'html']).optional(),
   "delayDays": zod.number().optional()
 })
 
@@ -258,6 +261,7 @@ export const UpdateSequenceResponse = zod.object({
   "stepNumber": zod.number(),
   "subject": zod.string(),
   "body": zod.string(),
+  "bodyType": zod.enum(['text', 'html']),
   "delayDays": zod.number(),
   "createdAt": zod.string()
 })
@@ -301,6 +305,31 @@ export const CreateLeadBody = zod.object({
   "title": zod.string().optional(),
   "website": zod.string().optional(),
   "phone": zod.string().optional()
+})
+
+
+/**
+ * @summary Bulk import leads from a JSON array (also accepts CSV text)
+ */
+export const BulkImportLeadsBody = zod.object({
+  "leads": zod.array(zod.object({
+  "email": zod.string(),
+  "firstName": zod.string().optional(),
+  "lastName": zod.string().optional(),
+  "company": zod.string().optional(),
+  "title": zod.string().optional(),
+  "website": zod.string().optional(),
+  "phone": zod.string().optional()
+})).describe('Array of lead objects, or pass csvText instead'),
+  "csvText": zod.string().optional().describe('Raw CSV text (email,firstName,lastName,company,title columns)'),
+  "campaignId": zod.number().optional().describe('Optionally add all imported leads to this campaign')
+})
+
+export const BulkImportLeadsResponse = zod.object({
+  "imported": zod.number(),
+  "skipped": zod.number(),
+  "total": zod.number(),
+  "leadIds": zod.array(zod.number()).optional()
 })
 
 
