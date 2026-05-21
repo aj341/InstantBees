@@ -6,7 +6,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { eq, ilike } from "drizzle-orm";
+import { eq, ilike, inArray } from "drizzle-orm";
 import {
   db,
   campaignsTable,
@@ -17,7 +17,37 @@ import {
   emailTemplatesTable,
   leadListsTable,
   listLeadsTable,
+  labelsTable,
+  leadLabelsTable,
+  type Lead,
+  type Label,
 } from "@workspace/db";
+
+async function attachLabelsToContacts<T extends Pick<Lead, "id">>(contacts: T[]): Promise<(T & { labels: Label[] })[]> {
+  if (contacts.length === 0) return [];
+  const ids = contacts.map((c) => c.id);
+  const rows = await db
+    .select({ leadId: leadLabelsTable.leadId, id: labelsTable.id, name: labelsTable.name, color: labelsTable.color, createdAt: labelsTable.createdAt })
+    .from(leadLabelsTable)
+    .innerJoin(labelsTable, eq(leadLabelsTable.labelId, labelsTable.id))
+    .where(inArray(leadLabelsTable.leadId, ids));
+  const byLead = new Map<number, Label[]>();
+  for (const r of rows) {
+    const { leadId, ...lbl } = r;
+    const list = byLead.get(leadId) ?? [];
+    list.push(lbl as Label);
+    byLead.set(leadId, list);
+  }
+  return contacts.map((c) => ({ ...c, labels: byLead.get(c.id) ?? [] }));
+}
+
+async function resolveLabelIds(raw: unknown): Promise<number[]> {
+  if (!Array.isArray(raw)) return [];
+  const ids = raw.map((n) => Number(n)).filter((n) => Number.isFinite(n));
+  if (ids.length === 0) return [];
+  const valid = await db.select({ id: labelsTable.id }).from(labelsTable).where(inArray(labelsTable.id, ids));
+  return valid.map((v) => v.id);
+}
 import { logger } from "../lib/logger.js";
 import { mcpAuth } from "../middleware/api-auth.js";
 
@@ -28,7 +58,7 @@ const router: IRouter = Router();
 const TOOLS = [
   {
     name: "upload_contacts",
-    description: "Bulk-upload contacts (leads) to a list. Pass a JSON array of contact objects OR raw CSV text with header row. Returns added/skipped counts. Deduplicates by email.",
+    description: "Bulk-upload contacts (leads) to a list. Pass a JSON array of contact objects OR raw CSV text with header row. Optionally attach labels to every imported contact via labelIds. Returns added/skipped counts and labelsApplied. Deduplicates by email.",
     inputSchema: {
       type: "object",
       properties: {
@@ -39,15 +69,33 @@ const TOOLS = [
           items: { type: "object", properties: { email: { type: "string" }, firstName: { type: "string" }, lastName: { type: "string" }, company: { type: "string" }, title: { type: "string" } }, required: ["email"] },
         },
         csvText: { type: "string", description: "Raw CSV text (header row required, must include 'email' column)" },
+        labelIds: { type: "array", items: { type: "number" }, description: "Optional: label IDs to apply to every imported contact. Use list_labels / create_label to discover or create label IDs." },
       },
     },
+  },
+  {
+    name: "create_label",
+    description: "Create a label (or return the existing one if a label with this name already exists). Idempotent on name.",
+    inputSchema: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", description: "Label name (case-sensitive, must be unique)" },
+        color: { type: "string", description: "Optional CSS color (hex, e.g. #06b6d4). Defaults to cyan if omitted." },
+      },
+    },
+  },
+  {
+    name: "list_labels",
+    description: "List all labels available for tagging contacts. Returns { data: [{id, name, color, createdAt}], total }.",
+    inputSchema: { type: "object", properties: {} },
   },
   { name: "create_list", description: "Create a new contact list.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string" }, description: { type: "string" } } } },
   { name: "list_lists", description: "List all contact lists.", inputSchema: { type: "object", properties: { limit: { type: "number" }, offset: { type: "number" } } } },
   {
     name: "list_contacts",
-    description: "List contacts, optionally filtered by list, search query, and paginated.",
-    inputSchema: { type: "object", properties: { listId: { type: "number" }, search: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
+    description: "List contacts, optionally filtered by list, search query, and/or labels. Each contact includes its labels array.",
+    inputSchema: { type: "object", properties: { listId: { type: "number" }, search: { type: "string" }, labelIds: { type: "array", items: { type: "number" }, description: "Optional: only return contacts that have ALL of these label IDs" }, limit: { type: "number" }, offset: { type: "number" } } },
   },
   {
     name: "update_contact",
@@ -170,7 +218,30 @@ async function dispatch(name: string, a: Record<string, unknown>): Promise<unkno
     if (a.listId && addedIds.length > 0) {
       await db.insert(listLeadsTable).values(addedIds.map(lid => ({ listId: Number(a.listId), leadId: lid }))).onConflictDoNothing();
     }
-    return { added, skipped, total: raw.length, message: `Imported ${added} contacts, skipped ${skipped} duplicates/invalid.` };
+    const validLabelIds = await resolveLabelIds(a.labelIds);
+    let labelsApplied = 0;
+    if (validLabelIds.length > 0 && addedIds.length > 0) {
+      const linkRows = addedIds.flatMap((lid) => validLabelIds.map((labelId) => ({ leadId: lid, labelId })));
+      await db.insert(leadLabelsTable).values(linkRows).onConflictDoNothing();
+      labelsApplied = validLabelIds.length;
+    }
+    return { added, skipped, total: raw.length, labelsApplied, message: `Imported ${added} contacts, skipped ${skipped} duplicates/invalid.` };
+  }
+
+  // ── Labels ─────────────────────────────────────────────────────────────
+  if (name === "create_label") {
+    const trimmed = String(a.name ?? "").trim();
+    if (!trimmed) throw new Error("'name' is required");
+    const existing = await db.select().from(labelsTable).where(eq(labelsTable.name, trimmed));
+    if (existing[0]) return existing[0];
+    const color = (typeof a.color === "string" && a.color) || "#06b6d4";
+    const [row] = await db.insert(labelsTable).values({ name: trimmed, color }).returning();
+    return row;
+  }
+
+  if (name === "list_labels") {
+    const rows = await db.select().from(labelsTable).orderBy(labelsTable.name);
+    return { data: rows, total: rows.length };
   }
 
   if (name === "list_contacts") {
@@ -187,7 +258,17 @@ async function dispatch(name: string, a: Record<string, unknown>): Promise<unkno
       const q = search.toLowerCase();
       contacts = contacts.filter(c => c.email.toLowerCase().includes(q) || c.firstName?.toLowerCase().includes(q) || c.company?.toLowerCase().includes(q));
     }
-    return { data: contacts.slice(offset, offset + limit), total: contacts.length };
+    if (Array.isArray(a.labelIds) && a.labelIds.length > 0) {
+      const ids = (a.labelIds as unknown[]).map((n) => Number(n)).filter((n) => Number.isFinite(n));
+      if (ids.length > 0) {
+        const links = await db.select().from(leadLabelsTable).where(inArray(leadLabelsTable.labelId, ids));
+        const countByLead = new Map<number, number>();
+        for (const l of links) countByLead.set(l.leadId, (countByLead.get(l.leadId) ?? 0) + 1);
+        contacts = contacts.filter((c) => (countByLead.get(c.id) ?? 0) === ids.length);
+      }
+    }
+    const page = contacts.slice(offset, offset + limit);
+    return { data: await attachLabelsToContacts(page), total: contacts.length };
   }
 
   if (name === "update_contact") {
