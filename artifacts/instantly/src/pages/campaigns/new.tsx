@@ -20,6 +20,7 @@ const schema = z.object({
   dailyLimit: z.coerce.number().min(1).max(10000).optional(),
   trackOpens: z.boolean().default(true),
   trackClicks: z.boolean().default(true),
+  includeUnsubscribe: z.boolean().default(true),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -48,6 +49,7 @@ export default function NewCampaign() {
       replyTo: "",
       trackOpens: true,
       trackClicks: true,
+      includeUnsubscribe: true,
     },
   });
 
@@ -60,6 +62,7 @@ export default function NewCampaign() {
         dailyLimit: values.dailyLimit,
         trackOpens: values.trackOpens,
         trackClicks: values.trackClicks,
+        includeUnsubscribe: values.includeUnsubscribe,
       },
     });
   }
@@ -176,6 +179,21 @@ export default function NewCampaign() {
                     </div>
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="switch-track-clicks" />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="includeUnsubscribe"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between">
+                    <div>
+                      <FormLabel>Include Unsubscribe Link</FormLabel>
+                      <FormDescription>Adds a one-click unsubscribe link and a List-Unsubscribe header to every email. Strongly recommended for deliverability and compliance.</FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="switch-include-unsub" />
                     </FormControl>
                   </FormItem>
                 )}

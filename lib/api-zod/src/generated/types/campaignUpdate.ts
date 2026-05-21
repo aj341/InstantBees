@@ -13,4 +13,5 @@ export interface CampaignUpdate {
   dailyLimit?: number;
   trackOpens?: boolean;
   trackClicks?: boolean;
+  includeUnsubscribe?: boolean;
 }

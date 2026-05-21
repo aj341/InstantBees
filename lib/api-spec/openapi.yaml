@@ -778,11 +778,15 @@ components:
           type: boolean
         trackClicks:
           type: boolean
+        includeUnsubscribe:
+          type: boolean
         leadsCount:
           type: integer
         sentCount:
           type: integer
         openCount:
+          type: integer
+        clickCount:
           type: integer
         replyCount:
           type: integer
@@ -807,6 +811,8 @@ components:
           type: boolean
         trackClicks:
           type: boolean
+        includeUnsubscribe:
+          type: boolean
 
     CampaignUpdate:
       type: object
@@ -822,6 +828,8 @@ components:
         trackOpens:
           type: boolean
         trackClicks:
+          type: boolean
+        includeUnsubscribe:
           type: boolean
 
     CampaignStatsOverview:

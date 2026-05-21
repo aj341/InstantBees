@@ -1,5 +1,5 @@
 import nodemailer, { type Transporter } from "nodemailer";
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHmac, timingSafeEqual } from "node:crypto";
 import type { EmailAccount } from "@workspace/db";
 import { decryptSecret } from "./crypto";
 
@@ -73,6 +73,7 @@ export interface SendInput {
   unsubscribeToken?: string;
   publicBaseUrl?: string;
   messageId?: string;
+  trackClicks?: boolean;
 }
 
 const HTML_TAG_RE = /<\/?(?:p|div|span|br|a|b|i|u|strong|em|h[1-6]|ul|ol|li|table|tr|td|th|img|hr|body|html|font|center|blockquote)\b/i;
@@ -105,6 +106,24 @@ export function generateTrackingToken(): string {
   return randomBytes(18).toString("base64url");
 }
 
+const TRACKING_SECRET = process.env["SESSION_SECRET"] ?? "";
+
+/** Sign a click-tracking destination URL so it can't be tampered with. */
+export function signClickUrl(token: string, url: string): string {
+  return createHmac("sha256", TRACKING_SECRET).update(`${token}|${url}`).digest("base64url").slice(0, 22);
+}
+
+/** Verify a click signature in constant time. Returns true iff the signature matches. */
+export function verifyClickSignature(token: string, url: string, sig: string): boolean {
+  const expected = signClickUrl(token, url);
+  if (expected.length !== sig.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(expected), Buffer.from(sig));
+  } catch {
+    return false;
+  }
+}
+
 export function buildMessageId(account: AccountWithSecret): string {
   const local = randomBytes(12).toString("hex");
   const domain = account.email.split("@")[1] ?? "localhost";
@@ -112,6 +131,23 @@ export function buildMessageId(account: AccountWithSecret): string {
 }
 
 const HTML_END_RE = /<\/body\s*>/i;
+const LINK_RE = /<a\s+([^>]*?)href\s*=\s*(["'])([^"']+)\2([^>]*)>/gi;
+
+/**
+ * Rewrite all <a href="..."> links to point through /api/track/click/:token?u=ENCODED.
+ * Skips mailto:, tel:, anchor (#) links, and links already pointing at the tracking endpoint.
+ */
+export function rewriteLinksForTracking(html: string, baseUrl: string, token: string): string {
+  const trackPrefix = `${baseUrl}/api/track/click/${token}`;
+  return html.replace(LINK_RE, (match, before: string, quote: string, url: string, after: string) => {
+    if (/^(mailto:|tel:|#|javascript:)/i.test(url)) return match;
+    if (!/^https?:\/\//i.test(url)) return match;
+    if (url.startsWith(trackPrefix)) return match;
+    const sig = signClickUrl(token, url);
+    const wrapped = `${trackPrefix}?u=${encodeURIComponent(url)}&s=${sig}`;
+    return `<a ${before}href=${quote}${wrapped}${quote}${after}>`;
+  });
+}
 
 function injectHtmlFooter(html: string, pixelUrl: string | null, unsubUrl: string | null): string {
   const footerParts: string[] = [];
@@ -151,7 +187,10 @@ export async function sendEmail(account: AccountWithSecret, input: SendInput): P
     : null;
 
   const isHtml = input.bodyType === "html" || looksLikeHtml(input.body);
-  const bodyForSend = isHtml ? decodeHtmlEntitiesIfEncoded(input.body) : input.body;
+  let bodyForSend = isHtml ? decodeHtmlEntitiesIfEncoded(input.body) : input.body;
+  if (isHtml && input.trackClicks && input.trackingToken && baseUrl) {
+    bodyForSend = rewriteLinksForTracking(bodyForSend, baseUrl, input.trackingToken);
+  }
   const mailOptions: nodemailer.SendMailOptions = {
     from: fromHeader,
     to: toHeader,

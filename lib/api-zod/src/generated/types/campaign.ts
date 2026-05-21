@@ -19,9 +19,11 @@ export interface Campaign {
   dailyLimit?: number | null;
   trackOpens?: boolean;
   trackClicks?: boolean;
+  includeUnsubscribe?: boolean;
   leadsCount?: number;
   sentCount?: number;
   openCount?: number;
+  clickCount?: number;
   replyCount?: number;
   bounceCount?: number;
   createdAt: string;

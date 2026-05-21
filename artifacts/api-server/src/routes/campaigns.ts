@@ -218,17 +218,18 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
     return;
   }
   const openRate = campaign.sentCount > 0 ? (campaign.openCount / campaign.sentCount) * 100 : 0;
+  const clickRate = campaign.sentCount > 0 ? (campaign.clickCount / campaign.sentCount) * 100 : 0;
   const replyRate = campaign.sentCount > 0 ? (campaign.replyCount / campaign.sentCount) * 100 : 0;
   const bounceRate = campaign.sentCount > 0 ? (campaign.bounceCount / campaign.sentCount) * 100 : 0;
   res.json({
     campaignId: campaign.id,
     sent: campaign.sentCount,
     opened: campaign.openCount,
-    clicked: 0,
+    clicked: campaign.clickCount,
     replied: campaign.replyCount,
     bounced: campaign.bounceCount,
     openRate: Math.round(openRate * 10) / 10,
-    clickRate: 0,
+    clickRate: Math.round(clickRate * 10) / 10,
     replyRate: Math.round(replyRate * 10) / 10,
     bounceRate: Math.round(bounceRate * 10) / 10,
   });

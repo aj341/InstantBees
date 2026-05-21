@@ -29,9 +29,11 @@ export const ListCampaignsResponseItem = zod.object({
   "dailyLimit": zod.number().nullish(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
+  "includeUnsubscribe": zod.boolean().optional(),
   "leadsCount": zod.number().optional(),
   "sentCount": zod.number().optional(),
   "openCount": zod.number().optional(),
+  "clickCount": zod.number().optional(),
   "replyCount": zod.number().optional(),
   "bounceCount": zod.number().optional(),
   "createdAt": zod.string()
@@ -48,7 +50,8 @@ export const CreateCampaignBody = zod.object({
   "replyTo": zod.string().optional(),
   "dailyLimit": zod.number().optional(),
   "trackOpens": zod.boolean().optional(),
-  "trackClicks": zod.boolean().optional()
+  "trackClicks": zod.boolean().optional(),
+  "includeUnsubscribe": zod.boolean().optional()
 })
 
 
@@ -83,9 +86,11 @@ export const GetCampaignResponse = zod.object({
   "dailyLimit": zod.number().nullish(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
+  "includeUnsubscribe": zod.boolean().optional(),
   "leadsCount": zod.number().optional(),
   "sentCount": zod.number().optional(),
   "openCount": zod.number().optional(),
+  "clickCount": zod.number().optional(),
   "replyCount": zod.number().optional(),
   "bounceCount": zod.number().optional(),
   "createdAt": zod.string()
@@ -105,7 +110,8 @@ export const UpdateCampaignBody = zod.object({
   "replyTo": zod.string().optional(),
   "dailyLimit": zod.number().optional(),
   "trackOpens": zod.boolean().optional(),
-  "trackClicks": zod.boolean().optional()
+  "trackClicks": zod.boolean().optional(),
+  "includeUnsubscribe": zod.boolean().optional()
 })
 
 export const UpdateCampaignResponse = zod.object({
@@ -117,9 +123,11 @@ export const UpdateCampaignResponse = zod.object({
   "dailyLimit": zod.number().nullish(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
+  "includeUnsubscribe": zod.boolean().optional(),
   "leadsCount": zod.number().optional(),
   "sentCount": zod.number().optional(),
   "openCount": zod.number().optional(),
+  "clickCount": zod.number().optional(),
   "replyCount": zod.number().optional(),
   "bounceCount": zod.number().optional(),
   "createdAt": zod.string()
@@ -150,9 +158,11 @@ export const LaunchCampaignResponse = zod.object({
   "dailyLimit": zod.number().nullish(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
+  "includeUnsubscribe": zod.boolean().optional(),
   "leadsCount": zod.number().optional(),
   "sentCount": zod.number().optional(),
   "openCount": zod.number().optional(),
+  "clickCount": zod.number().optional(),
   "replyCount": zod.number().optional(),
   "bounceCount": zod.number().optional(),
   "createdAt": zod.string()
@@ -175,9 +185,11 @@ export const PauseCampaignResponse = zod.object({
   "dailyLimit": zod.number().nullish(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
+  "includeUnsubscribe": zod.boolean().optional(),
   "leadsCount": zod.number().optional(),
   "sentCount": zod.number().optional(),
   "openCount": zod.number().optional(),
+  "clickCount": zod.number().optional(),
   "replyCount": zod.number().optional(),
   "bounceCount": zod.number().optional(),
   "createdAt": zod.string()

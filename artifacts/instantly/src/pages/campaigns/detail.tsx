@@ -319,6 +319,10 @@ export default function CampaignDetail() {
                   <dt className="text-muted-foreground">Track Clicks</dt>
                   <dd className="font-medium">{campaign.trackClicks ? "Yes" : "No"}</dd>
                 </div>
+                <div>
+                  <dt className="text-muted-foreground">Unsubscribe Link</dt>
+                  <dd className="font-medium">{campaign.includeUnsubscribe ? "Included" : "Off"}</dd>
+                </div>
               </dl>
             </CardContent>
           </Card>

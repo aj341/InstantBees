@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
+import { eq, and, sql, isNull } from "drizzle-orm";
 import { db, emailSendJobsTable, campaignsTable, leadsTable, unsubscribesTable } from "@workspace/db";
+import { verifyClickSignature } from "../lib/mailer";
 
 const router: IRouter = Router();
 
@@ -22,23 +23,87 @@ router.get("/track/open/:token.gif", async (req, res): Promise<void> => {
     const [job] = await db.select().from(emailSendJobsTable).where(eq(emailSendJobsTable.trackingToken, token));
     if (!job) return;
 
-    const isFirstOpen = !job.firstOpenedAt;
-    await db
+    // Atomic first-open: only the row update that succeeds (firstOpenedAt was NULL) increments the campaign.
+    const firstOpenSet = await db
       .update(emailSendJobsTable)
-      .set({
-        openCount: sql`${emailSendJobsTable.openCount} + 1`,
-        firstOpenedAt: isFirstOpen ? new Date() : job.firstOpenedAt,
-      })
-      .where(eq(emailSendJobsTable.id, job.id));
+      .set({ openCount: sql`${emailSendJobsTable.openCount} + 1`, firstOpenedAt: new Date() })
+      .where(and(eq(emailSendJobsTable.id, job.id), isNull(emailSendJobsTable.firstOpenedAt)))
+      .returning({ id: emailSendJobsTable.id });
 
-    if (isFirstOpen) {
+    if (firstOpenSet.length > 0) {
       await db
         .update(campaignsTable)
         .set({ openCount: sql`${campaignsTable.openCount} + 1` })
         .where(eq(campaignsTable.id, job.campaignId));
+    } else {
+      // Subsequent open — just bump the count.
+      await db
+        .update(emailSendJobsTable)
+        .set({ openCount: sql`${emailSendJobsTable.openCount} + 1` })
+        .where(eq(emailSendJobsTable.id, job.id));
     }
   } catch {
     // Swallow — pixel must always succeed
+  }
+});
+
+router.get("/track/click/:token", async (req, res): Promise<void> => {
+  const token = req.params.token;
+  const rawTarget = req.query["u"];
+  const rawSig = req.query["s"];
+  const target = typeof rawTarget === "string" ? rawTarget : "";
+  const sig = typeof rawSig === "string" ? rawSig : "";
+
+  // Validate protocol — must be http(s) so we can never redirect to javascript: or data:.
+  let parsedTarget: URL | null = null;
+  try {
+    const u = new URL(target);
+    if (u.protocol === "http:" || u.protocol === "https:") parsedTarget = u;
+  } catch {
+    parsedTarget = null;
+  }
+  if (!parsedTarget) {
+    res.status(400).type("text/plain").send("Invalid link");
+    return;
+  }
+
+  // Verify HMAC signature binding the destination to this specific token, so the destination
+  // can't be tampered with and this endpoint can't be used as a generic open redirect.
+  if (!sig || !verifyClickSignature(token, target, sig)) {
+    res.status(400).type("text/plain").send("Invalid signature");
+    return;
+  }
+
+  // Verify the token actually exists (i.e. corresponds to a real outbound email) before redirecting.
+  const [job] = await db.select().from(emailSendJobsTable).where(eq(emailSendJobsTable.trackingToken, token));
+  if (!job) {
+    res.status(404).type("text/plain").send("Unknown tracking token");
+    return;
+  }
+
+  res.redirect(302, parsedTarget.toString());
+
+  try {
+    // Atomic first-click: row update only succeeds if firstClickedAt was NULL.
+    const firstClickSet = await db
+      .update(emailSendJobsTable)
+      .set({ clickCount: sql`${emailSendJobsTable.clickCount} + 1`, firstClickedAt: new Date() })
+      .where(and(eq(emailSendJobsTable.id, job.id), isNull(emailSendJobsTable.firstClickedAt)))
+      .returning({ id: emailSendJobsTable.id });
+
+    if (firstClickSet.length > 0) {
+      await db
+        .update(campaignsTable)
+        .set({ clickCount: sql`${campaignsTable.clickCount} + 1` })
+        .where(eq(campaignsTable.id, job.campaignId));
+    } else {
+      await db
+        .update(emailSendJobsTable)
+        .set({ clickCount: sql`${emailSendJobsTable.clickCount} + 1` })
+        .where(eq(emailSendJobsTable.id, job.id));
+    }
+  } catch {
+    // Swallow — redirect already sent
   }
 });
 

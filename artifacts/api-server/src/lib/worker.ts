@@ -7,9 +7,10 @@ import {
   sequenceStepsTable,
   campaignsTable,
   dailyStatsTable,
+  unsubscribesTable,
   type EmailSendJob,
 } from "@workspace/db";
-import { sendEmail, renderMergeFields } from "./mailer";
+import { sendEmail, renderMergeFields, generateTrackingToken, getPublicBaseUrl, buildMessageId } from "./mailer";
 import { logger } from "./logger";
 
 const POLL_INTERVAL_MS = 10_000;
@@ -95,17 +96,52 @@ async function processOnce(): Promise<void> {
       const subject = renderMergeFields(step.subject, vars);
       const body = renderMergeFields(step.body, vars);
 
+      const publicBaseUrl = getPublicBaseUrl();
+      const trackingToken = campaign.trackOpens || campaign.trackClicks ? (job.trackingToken ?? generateTrackingToken()) : null;
+
+      let unsubscribeToken: string | null = null;
+      if (campaign.includeUnsubscribe) {
+        const existing = await db
+          .select()
+          .from(unsubscribesTable)
+          .where(and(eq(unsubscribesTable.leadId, lead.id), eq(unsubscribesTable.campaignId, campaign.id)))
+          .limit(1);
+        if (existing.length > 0 && existing[0]) {
+          unsubscribeToken = existing[0].token;
+        } else {
+          const token = generateTrackingToken();
+          const [inserted] = await db
+            .insert(unsubscribesTable)
+            .values({ leadId: lead.id, campaignId: campaign.id, token })
+            .returning();
+          unsubscribeToken = inserted?.token ?? token;
+        }
+      }
+
+      const outboundMessageId = buildMessageId(account);
+
       const { messageId } = await sendEmail(account, {
         to: lead.email,
         toName: [lead.firstName, lead.lastName].filter(Boolean).join(" ") || null,
         subject,
         body,
         bodyType: step.bodyType,
+        trackingToken: trackingToken ?? undefined,
+        unsubscribeToken: unsubscribeToken ?? undefined,
+        publicBaseUrl,
+        messageId: outboundMessageId,
+        trackClicks: campaign.trackClicks,
       });
 
       await db
         .update(emailSendJobsTable)
-        .set({ status: "sent", sentAt: new Date(), messageId })
+        .set({
+          status: "sent",
+          sentAt: new Date(),
+          messageId,
+          trackingToken: trackingToken ?? undefined,
+          unsubscribeToken: unsubscribeToken ?? undefined,
+        })
         .where(eq(emailSendJobsTable.id, job.id));
 
       await db
