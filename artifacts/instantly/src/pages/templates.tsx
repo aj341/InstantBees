@@ -178,12 +178,13 @@ export default function Templates() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={(v) => { if (!v) closeDialog(); }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl flex flex-col max-h-[90vh]">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{editingTemplate ? "Edit Template" : "New Template"}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
+              <div className="overflow-y-auto flex-1 space-y-4 pr-1">
               <FormField control={form.control} name="name" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Template Name</FormLabel>
@@ -249,7 +250,8 @@ export default function Templates() {
                 </FormItem>
               )} />
 
-              <DialogFooter>
+              </div>
+              <DialogFooter className="shrink-0 pt-4 border-t border-border mt-2">
                 <Button type="button" variant="outline" onClick={closeDialog} data-testid="button-cancel-template">Cancel</Button>
                 <Button type="submit" disabled={create.isPending || update.isPending} data-testid="button-submit-template">
                   {editingTemplate ? "Save Changes" : "Create Template"}
