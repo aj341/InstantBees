@@ -21,14 +21,23 @@ router.post("/auth/login", (req, res) => {
     res.status(401).json({ error: "Invalid username or password" });
     return;
   }
-  req.session.user = { username };
-  req.session.save((err) => {
-    if (err) {
-      logger.error({ err }, "Failed to save session");
+  // Regenerate the session ID on login to prevent session fixation: any pre-existing
+  // session cookie the client arrives with is discarded and a new sid is issued.
+  req.session.regenerate((regenErr) => {
+    if (regenErr) {
+      logger.error({ err: regenErr }, "Failed to regenerate session on login");
       res.status(500).json({ error: "Failed to create session" });
       return;
     }
-    res.json({ username, usingDefaultCredentials: isUsingDefaultCredentials() });
+    req.session.user = { username };
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        logger.error({ err: saveErr }, "Failed to save session");
+        res.status(500).json({ error: "Failed to create session" });
+        return;
+      }
+      res.json({ username, usingDefaultCredentials: isUsingDefaultCredentials() });
+    });
   });
 });
 
