@@ -19,7 +19,7 @@ import {
   listLeadsTable,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
-import { apiKeyAuth } from "../middleware/api-auth.js";
+import { mcpAuth } from "../middleware/api-auth.js";
 
 const router: IRouter = Router();
 
@@ -95,6 +95,7 @@ const TOOLS = [
     inputSchema: { type: "object", required: ["id"], properties: { id: { type: "number" }, dailySendLimit: { type: "number" }, warmupEnabled: { type: "boolean" } } },
   },
   { name: "get_campaign_stats", description: "Get per-campaign analytics: sent, opened, replied, bounced, rates, and per-step breakdown.", inputSchema: { type: "object", required: ["campaignId"], properties: { campaignId: { type: "number" } } } },
+  { name: "analytics_overview", description: "Get global account-level analytics: campaign counts by status, and aggregate email totals (sent, opened, replied, bounced) with overall open/reply/bounce rates.", inputSchema: { type: "object", properties: {} } },
 ];
 
 // ── Server factory ──────────────────────────────────────────────────────────
@@ -335,12 +336,36 @@ async function dispatch(name: string, a: Record<string, unknown>): Promise<unkno
     };
   }
 
+  // ── Global analytics overview ───────────────────────────────────────────
+  if (name === "analytics_overview") {
+    const campaigns = await db.select().from(campaignsTable);
+    const sent = campaigns.reduce((s, c) => s + c.sentCount, 0);
+    const opened = campaigns.reduce((s, c) => s + c.openCount, 0);
+    const replied = campaigns.reduce((s, c) => s + c.replyCount, 0);
+    const bounced = campaigns.reduce((s, c) => s + c.bounceCount, 0);
+    return {
+      campaigns: {
+        total: campaigns.length,
+        active: campaigns.filter(c => c.status === "active").length,
+        draft: campaigns.filter(c => c.status === "draft").length,
+        paused: campaigns.filter(c => c.status === "paused").length,
+        completed: campaigns.filter(c => c.status === "completed").length,
+      },
+      emails: {
+        sent, opened, replied, bounced,
+        openRate: sent > 0 ? parseFloat(((opened / sent) * 100).toFixed(1)) : 0,
+        replyRate: sent > 0 ? parseFloat(((replied / sent) * 100).toFixed(1)) : 0,
+        bounceRate: sent > 0 ? parseFloat(((bounced / sent) * 100).toFixed(1)) : 0,
+      },
+    };
+  }
+
   throw new Error(`Unknown tool: ${name}`);
 }
 
 // ── Route handlers ──────────────────────────────────────────────────────────
 
-router.all("/mcp", apiKeyAuth, async (req: Request, res: Response): Promise<void> => {
+router.all("/mcp", mcpAuth, async (req: Request, res: Response): Promise<void> => {
   const server = buildServer();
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   try {
