@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Pencil, Trash2, FileText, Code2, Type } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText, Code2, Type, Braces } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/email-editor/rich-text-editor";
 
@@ -43,6 +43,18 @@ export default function Templates() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [editorMode, setEditorMode] = useState<"text" | "rich" | "source">("text");
+
+  function inferEditorMode(body: string, bodyType: string): "text" | "rich" | "source" {
+    if (bodyType !== "html") return "text";
+    if (/<!doctype|<html|<head|<style|<body/i.test(body)) return "source";
+    return "rich";
+  }
+
+  function setMode(mode: "text" | "rich" | "source") {
+    setEditorMode(mode);
+    form.setValue("bodyType", mode === "text" ? "text" : "html");
+  }
 
   const { data: templates, isLoading } = useListTemplates({ query: { queryKey: getListTemplatesQueryKey() } });
 
@@ -83,17 +95,18 @@ export default function Templates() {
     defaultValues: { name: "", subject: "", body: "", bodyType: "text" },
   });
 
-  const watchedBodyType = form.watch("bodyType");
-
   function openCreate() {
     setEditingTemplate(null);
     form.reset({ name: "", subject: "", body: "", bodyType: "text" });
+    setEditorMode("text");
     setDialogOpen(true);
   }
 
   function openEdit(t: Template) {
     setEditingTemplate(t);
-    form.reset({ name: t.name, subject: t.subject, body: t.body, bodyType: (t.bodyType as "text" | "html") ?? "text" });
+    const bt = (t.bodyType as "text" | "html") ?? "text";
+    form.reset({ name: t.name, subject: t.subject, body: t.body, bodyType: bt });
+    setEditorMode(inferEditorMode(t.body, bt));
     setDialogOpen(true);
   }
 
@@ -201,41 +214,55 @@ export default function Templates() {
                 </FormItem>
               )} />
 
-              <FormField control={form.control} name="bodyType" render={({ field }) => (
-                <FormItem>
-                  <div className="flex items-center justify-between">
-                    <FormLabel>Body</FormLabel>
-                    <div className="flex items-center gap-1 rounded-md border border-border bg-muted/30 p-0.5">
-                      <button
-                        type="button"
-                        onClick={() => field.onChange("text")}
-                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${field.value === "text" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                        data-testid="toggle-template-text"
-                      >
-                        <Type className="h-3 w-3" /> Plain Text
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => field.onChange("html")}
-                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${field.value === "html" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                        data-testid="toggle-template-html"
-                      >
-                        <Code2 className="h-3 w-3" /> Rich HTML
-                      </button>
-                    </div>
+              <FormItem>
+                <div className="flex items-center justify-between">
+                  <FormLabel>Body</FormLabel>
+                  <div className="flex items-center gap-1 rounded-md border border-border bg-muted/30 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setMode("text")}
+                      className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${editorMode === "text" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid="toggle-template-text"
+                    >
+                      <Type className="h-3 w-3" /> Plain Text
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode("rich")}
+                      className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${editorMode === "rich" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid="toggle-template-html"
+                    >
+                      <Code2 className="h-3 w-3" /> Rich HTML
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode("source")}
+                      className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${editorMode === "source" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid="toggle-template-source"
+                    >
+                      <Braces className="h-3 w-3" /> HTML Source
+                    </button>
                   </div>
-                </FormItem>
-              )} />
+                </div>
+              </FormItem>
 
               <FormField control={form.control} name="body" render={({ field }) => (
                 <FormItem>
                   <FormControl>
-                    {watchedBodyType === "html" ? (
+                    {editorMode === "rich" ? (
                       <RichTextEditor
                         value={field.value}
                         onChange={field.onChange}
                         placeholder="Write your email body here... Use {{firstName}}, {{company}}, etc. for personalization."
                         data-testid="input-template-body"
+                      />
+                    ) : editorMode === "source" ? (
+                      <Textarea
+                        placeholder={"<!DOCTYPE html>\n<html>\n  <body>\n    Hi {{firstName}}, ...\n  </body>\n</html>"}
+                        rows={12}
+                        className="font-mono text-xs"
+                        data-testid="input-template-body"
+                        {...field}
                       />
                     ) : (
                       <Textarea
@@ -246,6 +273,9 @@ export default function Templates() {
                       />
                     )}
                   </FormControl>
+                  {editorMode === "source" && (
+                    <p className="text-xs text-muted-foreground">Paste raw HTML — it will be sent exactly as written.</p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )} />

@@ -14,6 +14,8 @@ import {
   useLaunchCampaign,
   usePauseCampaign,
   useListTemplates,
+  useListAccounts,
+  useSendTestStep,
   getGetCampaignQueryKey,
   getGetCampaignAnalyticsQueryKey,
   getListSequencesQueryKey,
@@ -21,6 +23,7 @@ import {
   getListCampaignsQueryKey,
   getGetCampaignStatsQueryKey,
   getListTemplatesQueryKey,
+  getListAccountsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -36,7 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type, FileText } from "lucide-react";
+import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type, FileText, Send, Braces } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/email-editor/rich-text-editor";
@@ -68,8 +71,52 @@ export default function CampaignDetail() {
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<"text" | "rich" | "source">("text");
+  const [testDialog, setTestDialog] = useState<{ stepId: number; subject: string } | null>(null);
+  const [testAccountId, setTestAccountId] = useState<number | null>(null);
+  const [testToEmail, setTestToEmail] = useState("");
 
   const { data: templates } = useListTemplates({ query: { queryKey: getListTemplatesQueryKey() } });
+  const { data: accounts } = useListAccounts({ query: { queryKey: getListAccountsQueryKey() } });
+
+  const sendTest = useSendTestStep({
+    mutation: {
+      onSuccess: (data: { ok: boolean; error?: string }) => {
+        if (data.ok) {
+          toast({ title: "Test sent", description: `Email sent to ${testToEmail}` });
+          setTestDialog(null);
+        } else {
+          toast({ title: "Test send failed", description: data.error ?? "Unknown error", variant: "destructive" });
+        }
+      },
+      onError: (err: Error) => toast({ title: "Test send failed", description: err.message, variant: "destructive" }),
+    },
+  });
+
+  function openTestDialog(step: { id: number; subject: string }) {
+    const firstSendable = accounts?.find(a => a.hasSmtpPassword);
+    if (firstSendable) {
+      setTestAccountId(firstSendable.id);
+      setTestToEmail(firstSendable.email);
+    }
+    setTestDialog({ stepId: step.id, subject: step.subject });
+  }
+
+  function submitTest() {
+    if (!testDialog || !testAccountId || !testToEmail) return;
+    sendTest.mutate({ id, stepId: testDialog.stepId, data: { accountId: testAccountId, toEmail: testToEmail } });
+  }
+
+  function inferEditorMode(body: string, bodyType: string): "text" | "rich" | "source" {
+    if (bodyType !== "html") return "text";
+    if (/<!doctype|<html|<head|<style|<body/i.test(body)) return "source";
+    return "rich";
+  }
+
+  function setMode(mode: "text" | "rich" | "source") {
+    setEditorMode(mode);
+    seqForm.setValue("bodyType", mode === "text" ? "text" : "html");
+  }
 
   const { data: campaign, isLoading } = useGetCampaign(id, { query: { enabled: !!id, queryKey: getGetCampaignQueryKey(id) } });
   const { data: analytics } = useGetCampaignAnalytics(id, { query: { enabled: !!id, queryKey: getGetCampaignAnalyticsQueryKey(id) } });
@@ -163,8 +210,6 @@ export default function CampaignDetail() {
     defaultValues: { subject: "", body: "", bodyType: "text", delayDays: 0 },
   });
 
-  const watchedBodyType = seqForm.watch("bodyType");
-
   function onSeqSubmit(values: SeqForm) {
     if (editStep) {
       updateSeq.mutate({ id, stepId: editStep.id, data: values });
@@ -175,7 +220,16 @@ export default function CampaignDetail() {
 
   function openEdit(step: { id: number; subject: string; body: string; bodyType: "text" | "html"; delayDays: number }) {
     setEditStep(step);
-    seqForm.reset({ subject: step.subject, body: step.body, bodyType: step.bodyType ?? "text", delayDays: step.delayDays });
+    const bt = step.bodyType ?? "text";
+    seqForm.reset({ subject: step.subject, body: step.body, bodyType: bt, delayDays: step.delayDays });
+    setEditorMode(inferEditorMode(step.body, bt));
+    setSeqDialogOpen(true);
+  }
+
+  function openCreate() {
+    setEditStep(null);
+    seqForm.reset({ subject: "", body: "", bodyType: "text", delayDays: 0 });
+    setEditorMode("text");
     setSeqDialogOpen(true);
   }
 
@@ -273,7 +327,7 @@ export default function CampaignDetail() {
         {/* Sequence Tab */}
         <TabsContent value="sequence" className="mt-4 space-y-4">
           <div className="flex justify-end">
-            <Button onClick={() => { setEditStep(null); seqForm.reset(); setSeqDialogOpen(true); }} data-testid="button-add-step">
+            <Button onClick={openCreate} data-testid="button-add-step">
               <Plus className="mr-2 h-4 w-4" /> Add Step
             </Button>
           </div>
@@ -311,6 +365,9 @@ export default function CampaignDetail() {
                         </div>
                       </div>
                       <div className="flex gap-1 shrink-0">
+                        <Button variant="ghost" size="icon" onClick={() => openTestDialog({ id: step.id, subject: step.subject })} title="Send test to me" data-testid={`button-test-step-${step.id}`}>
+                          <Send className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => openEdit({ ...step, bodyType: (step.bodyType ?? "text") as "text" | "html" })} data-testid={`button-edit-step-${step.id}`}>
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -390,7 +447,9 @@ export default function CampaignDetail() {
                 onClick={() => {
                   seqForm.setValue("subject", t.subject);
                   seqForm.setValue("body", t.body);
-                  seqForm.setValue("bodyType", (t.bodyType as "text" | "html") ?? "text");
+                  const bt = (t.bodyType as "text" | "html") ?? "text";
+                  seqForm.setValue("bodyType", bt);
+                  setEditorMode(inferEditorMode(t.body, bt));
                   setTemplatePickerOpen(false);
                 }}
                 data-testid={`pick-template-${t.id}`}
@@ -439,41 +498,55 @@ export default function CampaignDetail() {
               )} />
 
               {/* Body type toggle */}
-              <FormField control={seqForm.control} name="bodyType" render={({ field }) => (
-                <FormItem>
-                  <div className="flex items-center justify-between">
-                    <FormLabel>Body</FormLabel>
-                    <div className="flex items-center gap-1 rounded-md border border-border bg-muted/30 p-0.5">
-                      <button
-                        type="button"
-                        onClick={() => field.onChange("text")}
-                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${field.value === "text" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                        data-testid="toggle-body-text"
-                      >
-                        <Type className="h-3 w-3" /> Plain Text
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => field.onChange("html")}
-                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${field.value === "html" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                        data-testid="toggle-body-html"
-                      >
-                        <Code2 className="h-3 w-3" /> Rich HTML
-                      </button>
-                    </div>
+              <FormItem>
+                <div className="flex items-center justify-between">
+                  <FormLabel>Body</FormLabel>
+                  <div className="flex items-center gap-1 rounded-md border border-border bg-muted/30 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setMode("text")}
+                      className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${editorMode === "text" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid="toggle-body-text"
+                    >
+                      <Type className="h-3 w-3" /> Plain Text
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode("rich")}
+                      className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${editorMode === "rich" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid="toggle-body-html"
+                    >
+                      <Code2 className="h-3 w-3" /> Rich HTML
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode("source")}
+                      className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${editorMode === "source" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid="toggle-body-source"
+                    >
+                      <Braces className="h-3 w-3" /> HTML Source
+                    </button>
                   </div>
-                </FormItem>
-              )} />
+                </div>
+              </FormItem>
 
               <FormField control={seqForm.control} name="body" render={({ field }) => (
                 <FormItem>
                   <FormControl>
-                    {watchedBodyType === "html" ? (
+                    {editorMode === "rich" ? (
                       <RichTextEditor
                         value={field.value}
                         onChange={field.onChange}
                         placeholder="Write your HTML email here..."
                         data-testid="input-step-body"
+                      />
+                    ) : editorMode === "source" ? (
+                      <Textarea
+                        placeholder={"<!DOCTYPE html>\n<html>\n  <body>\n    Hi {{firstName}}, ...\n  </body>\n</html>"}
+                        rows={12}
+                        className="font-mono text-xs"
+                        data-testid="input-step-body"
+                        {...field}
                       />
                     ) : (
                       <Textarea
@@ -484,6 +557,9 @@ export default function CampaignDetail() {
                       />
                     )}
                   </FormControl>
+                  {editorMode === "source" && (
+                    <FormDescription>Paste raw HTML. It will be sent exactly as written. Use {"{{firstName}}"}, {"{{company}}"}, etc. for personalization.</FormDescription>
+                  )}
                   <FormMessage />
                 </FormItem>
               )} />
@@ -504,6 +580,56 @@ export default function CampaignDetail() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Test dialog */}
+      <Dialog open={!!testDialog} onOpenChange={v => { if (!v) setTestDialog(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Test Email</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              Step: <span className="font-medium text-foreground">{testDialog?.subject}</span>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">From account</label>
+              <Select value={testAccountId ? String(testAccountId) : ""} onValueChange={v => setTestAccountId(parseInt(v, 10))}>
+                <SelectTrigger data-testid="select-test-account"><SelectValue placeholder="Choose an account" /></SelectTrigger>
+                <SelectContent>
+                  {(accounts ?? []).filter(a => a.hasSmtpPassword).map(a => (
+                    <SelectItem key={a.id} value={String(a.id)}>{a.email}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!accounts?.some(a => a.hasSmtpPassword) && (
+                <p className="text-xs text-destructive">No accounts with SMTP credentials. Add an account first.</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Send to</label>
+              <Input
+                type="email"
+                value={testToEmail}
+                onChange={e => setTestToEmail(e.target.value)}
+                placeholder="you@example.com"
+                data-testid="input-test-to"
+              />
+              <p className="text-xs text-muted-foreground">Sample merge values (Alex Smith / Acme Inc.) will be used.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTestDialog(null)} data-testid="button-cancel-test">Cancel</Button>
+            <Button
+              onClick={submitTest}
+              disabled={!testAccountId || !testToEmail || sendTest.isPending}
+              data-testid="button-submit-test"
+            >
+              <Send className="mr-2 h-4 w-4" />
+              {sendTest.isPending ? "Sending..." : "Send Test"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

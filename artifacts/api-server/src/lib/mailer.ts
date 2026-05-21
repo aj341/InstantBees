@@ -80,6 +80,27 @@ export function looksLikeHtml(body: string): boolean {
   return HTML_TAG_RE.test(body);
 }
 
+/**
+ * Some legacy rows have HTML stored as entity-encoded text (e.g. pasted into a WYSIWYG
+ * that escaped the source). Detect that case heuristically and decode it.
+ */
+const ENCODED_TAG_RE = /&lt;\s*(?:!doctype|html|body|head|p|div|span|br|a|table|h[1-6]|ul|ol|li|img|hr|strong|em)\b/i;
+export function decodeHtmlEntitiesIfEncoded(body: string): string {
+  // Only decode when the body looks entity-encoded AND contains no real HTML tags —
+  // i.e. the legacy case where source HTML was pasted into a WYSIWYG that escaped it.
+  // If real tags exist, the user likely intends any &lt;…&gt; literals to render as text.
+  if (!ENCODED_TAG_RE.test(body)) return body;
+  if (HTML_TAG_RE.test(body)) return body;
+  return body
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+}
+
 export function generateTrackingToken(): string {
   return randomBytes(18).toString("base64url");
 }
@@ -130,6 +151,7 @@ export async function sendEmail(account: AccountWithSecret, input: SendInput): P
     : null;
 
   const isHtml = input.bodyType === "html" || looksLikeHtml(input.body);
+  const bodyForSend = isHtml ? decodeHtmlEntitiesIfEncoded(input.body) : input.body;
   const mailOptions: nodemailer.SendMailOptions = {
     from: fromHeader,
     to: toHeader,
@@ -141,10 +163,10 @@ export async function sendEmail(account: AccountWithSecret, input: SendInput): P
   if (input.messageId) mailOptions.messageId = input.messageId;
 
   if (isHtml) {
-    mailOptions.html = injectHtmlFooter(input.body, pixelUrl, unsubUrl);
-    mailOptions.text = buildTextFooter(stripHtml(input.body), unsubUrl);
+    mailOptions.html = injectHtmlFooter(bodyForSend, pixelUrl, unsubUrl);
+    mailOptions.text = buildTextFooter(stripHtml(bodyForSend), unsubUrl);
   } else {
-    mailOptions.text = buildTextFooter(input.body, unsubUrl);
+    mailOptions.text = buildTextFooter(bodyForSend, unsubUrl);
   }
 
   const info = await transport.sendMail(mailOptions);

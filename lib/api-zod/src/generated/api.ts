@@ -241,6 +241,25 @@ export const CreateSequenceBody = zod.object({
 
 
 /**
+ * @summary Send a test email for a sequence step to a chosen recipient
+ */
+export const SendTestStepParams = zod.object({
+  "id": zod.coerce.number(),
+  "stepId": zod.coerce.number()
+})
+
+export const SendTestStepBody = zod.object({
+  "accountId": zod.number(),
+  "toEmail": zod.string().email()
+})
+
+export const SendTestStepResponse = zod.object({
+  "ok": zod.boolean(),
+  "error": zod.string().optional()
+})
+
+
+/**
  * @summary Update a sequence step
  */
 export const UpdateSequenceParams = zod.object({

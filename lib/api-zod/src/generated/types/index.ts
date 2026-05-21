@@ -39,6 +39,7 @@ export * from './leadInput';
 export * from './leadStatus';
 export * from './leadUpdate';
 export * from './leadUpdateStatus';
+export * from './sendTestStepInput';
 export * from './sequenceStep';
 export * from './sequenceStepBodyType';
 export * from './sequenceStepInput';

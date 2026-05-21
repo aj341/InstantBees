@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and, count } from "drizzle-orm";
-import { db, sequenceStepsTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
+import { db, sequenceStepsTable, emailAccountsTable } from "@workspace/db";
 import {
   CreateSequenceBody,
   CreateSequenceParams,
@@ -8,7 +8,10 @@ import {
   UpdateSequenceParams,
   DeleteSequenceParams,
   ListSequencesParams,
+  SendTestStepBody,
+  SendTestStepParams,
 } from "@workspace/api-zod";
+import { sendEmail, renderMergeFields } from "../lib/mailer";
 
 const router: IRouter = Router();
 
@@ -74,6 +77,60 @@ router.patch("/campaigns/:id/sequences/:stepId", async (req, res): Promise<void>
     return;
   }
   res.json(step);
+});
+
+router.post("/campaigns/:id/sequences/:stepId/test", async (req, res): Promise<void> => {
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const rawStepId = Array.isArray(req.params.stepId) ? req.params.stepId[0] : req.params.stepId;
+  const params = SendTestStepParams.safeParse({ id: parseInt(rawId, 10), stepId: parseInt(rawStepId, 10) });
+  if (!params.success) {
+    res.status(400).json({ ok: false, error: params.error.message });
+    return;
+  }
+  const body = SendTestStepBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ ok: false, error: body.error.message });
+    return;
+  }
+  const [step] = await db
+    .select()
+    .from(sequenceStepsTable)
+    .where(and(eq(sequenceStepsTable.id, params.data.stepId), eq(sequenceStepsTable.campaignId, params.data.id)));
+  if (!step) {
+    res.status(404).json({ ok: false, error: "Step not found" });
+    return;
+  }
+  const [account] = await db.select().from(emailAccountsTable).where(eq(emailAccountsTable.id, body.data.accountId));
+  if (!account) {
+    res.status(404).json({ ok: false, error: "Account not found" });
+    return;
+  }
+  if (!account.smtpPasswordEnc) {
+    res.status(400).json({ ok: false, error: "Account has no SMTP password configured" });
+    return;
+  }
+  const previewVars = {
+    firstName: "Alex",
+    lastName: "Smith",
+    company: "Acme Inc.",
+    title: "Founder",
+    email: body.data.toEmail,
+  };
+  try {
+    const subject = "[TEST] " + renderMergeFields(step.subject, previewVars);
+    const renderedBody = renderMergeFields(step.body, previewVars);
+    await sendEmail(account, {
+      to: body.data.toEmail,
+      toName: null,
+      subject,
+      body: renderedBody,
+      bodyType: step.bodyType,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.json({ ok: false, error: message });
+  }
 });
 
 router.delete("/campaigns/:id/sequences/:stepId", async (req, res): Promise<void> => {

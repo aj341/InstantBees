@@ -296,6 +296,11 @@ export interface EmailAccountUpdate {
   smtpPassword?: string;
 }
 
+export interface SendTestStepInput {
+  accountId: number;
+  toEmail: string;
+}
+
 export interface AccountTestResult {
   ok: boolean;
   error?: string;

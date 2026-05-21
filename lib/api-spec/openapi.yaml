@@ -247,6 +247,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/SequenceStep"
 
+  /campaigns/{id}/sequences/{stepId}/test:
+    post:
+      operationId: sendTestStep
+      tags: [sequences]
+      summary: Send a test email for a sequence step to a chosen recipient
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: stepId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendTestStepInput"
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountTestResult"
+
   /campaigns/{id}/sequences/{stepId}:
     patch:
       operationId: updateSequence
@@ -1091,6 +1113,16 @@ components:
           type: string
         smtpPassword:
           type: string
+
+    SendTestStepInput:
+      type: object
+      required: [accountId, toEmail]
+      properties:
+        accountId:
+          type: integer
+        toEmail:
+          type: string
+          format: email
 
     AccountTestResult:
       type: object

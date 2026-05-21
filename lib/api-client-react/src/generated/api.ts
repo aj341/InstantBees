@@ -43,6 +43,7 @@ import type {
   Lead,
   LeadInput,
   LeadUpdate,
+  SendTestStepInput,
   SequenceStep,
   SequenceStepInput,
   SequenceStepUpdate,
@@ -947,6 +948,80 @@ export const useCreateSequence = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateSequenceMutationOptions(options));
+    }
+
+export const getSendTestStepUrl = (id: number,
+    stepId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/sequences/${stepId}/test`
+}
+
+/**
+ * @summary Send a test email for a sequence step to a chosen recipient
+ */
+export const sendTestStep = async (id: number,
+    stepId: number,
+    sendTestStepInput: SendTestStepInput, options?: RequestInit): Promise<AccountTestResult> => {
+
+  return customFetch<AccountTestResult>(getSendTestStepUrl(id,stepId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      sendTestStepInput,)
+  }
+);}
+
+
+
+
+export const getSendTestStepMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendTestStep>>, TError,{id: number;stepId: number;data: BodyType<SendTestStepInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendTestStep>>, TError,{id: number;stepId: number;data: BodyType<SendTestStepInput>}, TContext> => {
+
+const mutationKey = ['sendTestStep'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendTestStep>>, {id: number;stepId: number;data: BodyType<SendTestStepInput>}> = (props) => {
+          const {id,stepId,data} = props ?? {};
+
+          return  sendTestStep(id,stepId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendTestStepMutationResult = NonNullable<Awaited<ReturnType<typeof sendTestStep>>>
+    export type SendTestStepMutationBody = BodyType<SendTestStepInput>
+    export type SendTestStepMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Send a test email for a sequence step to a chosen recipient
+ */
+export const useSendTestStep = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendTestStep>>, TError,{id: number;stepId: number;data: BodyType<SendTestStepInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendTestStep>>,
+        TError,
+        {id: number;stepId: number;data: BodyType<SendTestStepInput>},
+        TContext
+      > => {
+      return useMutation(getSendTestStepMutationOptions(options));
     }
 
 export const getUpdateSequenceUrl = (id: number,
