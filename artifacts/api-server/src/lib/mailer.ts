@@ -71,8 +71,13 @@ export interface SendInput {
   bodyType: "text" | "html" | string;
   trackingToken?: string;
   unsubscribeToken?: string;
-  publicBaseUrl: string;
+  publicBaseUrl?: string;
   messageId?: string;
+}
+
+const HTML_TAG_RE = /<\/?(?:p|div|span|br|a|b|i|u|strong|em|h[1-6]|ul|ol|li|table|tr|td|th|img|hr|body|html|font|center|blockquote)\b/i;
+export function looksLikeHtml(body: string): boolean {
+  return HTML_TAG_RE.test(body);
 }
 
 export function generateTrackingToken(): string {
@@ -116,14 +121,15 @@ export async function sendEmail(account: AccountWithSecret, input: SendInput): P
   const transport = buildTransport(account);
   const fromHeader = account.name ? `"${account.name}" <${account.email}>` : account.email;
   const toHeader = input.toName ? `"${input.toName}" <${input.to}>` : input.to;
-  const pixelUrl = input.trackingToken
-    ? `${input.publicBaseUrl}/api/track/open/${input.trackingToken}.gif`
+  const baseUrl = input.publicBaseUrl;
+  const pixelUrl = input.trackingToken && baseUrl
+    ? `${baseUrl}/api/track/open/${input.trackingToken}.gif`
     : null;
-  const unsubUrl = input.unsubscribeToken
-    ? `${input.publicBaseUrl}/api/unsubscribe/${input.unsubscribeToken}`
+  const unsubUrl = input.unsubscribeToken && baseUrl
+    ? `${baseUrl}/api/unsubscribe/${input.unsubscribeToken}`
     : null;
 
-  const isHtml = input.bodyType === "html";
+  const isHtml = input.bodyType === "html" || looksLikeHtml(input.body);
   const mailOptions: nodemailer.SendMailOptions = {
     from: fromHeader,
     to: toHeader,
