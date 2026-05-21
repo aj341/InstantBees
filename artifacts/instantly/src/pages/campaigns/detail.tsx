@@ -411,8 +411,8 @@ export default function CampaignDetail() {
 
       {/* Sequence step dialog */}
       <Dialog open={seqDialogOpen} onOpenChange={v => { setSeqDialogOpen(v); if (!v) { setEditStep(null); seqForm.reset(); } }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl flex flex-col max-h-[90vh]">
+          <DialogHeader className="shrink-0">
             <div className="flex items-center justify-between">
               <DialogTitle>{editStep ? "Edit Step" : "Add Sequence Step"}</DialogTitle>
               <Button
@@ -428,7 +428,8 @@ export default function CampaignDetail() {
             </div>
           </DialogHeader>
           <Form {...seqForm}>
-            <form onSubmit={seqForm.handleSubmit(onSeqSubmit)} className="space-y-4">
+            <form onSubmit={seqForm.handleSubmit(onSeqSubmit)} className="flex flex-col flex-1 min-h-0">
+              <div className="overflow-y-auto flex-1 space-y-4 pr-1">
               <FormField control={seqForm.control} name="subject" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Subject</FormLabel>
@@ -494,7 +495,8 @@ export default function CampaignDetail() {
                   <FormDescription>0 = same day as previous step or campaign launch</FormDescription>
                 </FormItem>
               )} />
-              <DialogFooter>
+              </div>
+              <DialogFooter className="shrink-0 pt-4 border-t border-border mt-2">
                 <Button type="button" variant="outline" onClick={() => setSeqDialogOpen(false)} data-testid="button-cancel-step">Cancel</Button>
                 <Button type="submit" disabled={createSeq.isPending || updateSeq.isPending} data-testid="button-submit-step">
                   {editStep ? "Save Changes" : "Add Step"}
