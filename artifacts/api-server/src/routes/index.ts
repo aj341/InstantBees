@@ -7,6 +7,8 @@ import sequencesRouter from "./sequences";
 import inboxRouter from "./inbox";
 import analyticsRouter from "./analytics";
 import mcpRouter from "./mcp";
+import mcpHttpRouter from "./mcp-http";
+import v1Router from "./v1/index";
 
 const router: IRouter = Router();
 
@@ -18,5 +20,7 @@ router.use(sequencesRouter);
 router.use(inboxRouter);
 router.use(analyticsRouter);
 router.use(mcpRouter);
+router.use(mcpHttpRouter);
+router.use("/v1", v1Router);
 
 export default router;
