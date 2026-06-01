@@ -3,8 +3,10 @@ import { useListInboxMessages, useUpdateInboxMessage, getListInboxMessagesQueryK
 import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Archive, Star, Circle, CheckCircle, Inbox as InboxIcon, TrendingUp, Minus, TrendingDown } from "lucide-react";
+import { Archive, Star, Circle, CheckCircle, Inbox as InboxIcon, TrendingUp, Minus, TrendingDown, Search } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 
@@ -16,6 +18,8 @@ const SENTIMENT_CONFIG = {
 
 export default function Inbox() {
   const [selected, setSelected] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
+  const [sentimentFilter, setSentimentFilter] = useState<"all" | "positive" | "neutral" | "negative">("all");
   const queryClient = useQueryClient();
   const { data: messages, isLoading } = useListInboxMessages();
 
@@ -28,6 +32,15 @@ export default function Inbox() {
 
   const selectedMsg = messages?.find(m => m.id === selected);
   const unreadCount = messages?.filter(m => !m.isRead).length ?? 0;
+  const positiveCount = messages?.filter(m => m.sentiment === "positive").length ?? 0;
+  const neutralCount = messages?.filter(m => m.sentiment === "neutral").length ?? 0;
+  const negativeCount = messages?.filter(m => m.sentiment === "negative").length ?? 0;
+  const filteredMessages = messages?.filter((msg) => {
+    const haystack = `${msg.fromName ?? ""} ${msg.fromEmail ?? ""} ${msg.subject ?? ""} ${msg.body ?? ""}`.toLowerCase();
+    const matchesQuery = !query.trim() || haystack.includes(query.trim().toLowerCase());
+    const matchesSentiment = sentimentFilter === "all" || msg.sentiment === sentimentFilter;
+    return matchesQuery && matchesSentiment;
+  });
 
   function markRead(id: number) {
     update.mutate({ id, data: { isRead: true } });
@@ -46,25 +59,69 @@ export default function Inbox() {
   return (
     <div className="flex h-[calc(100vh-0px)] max-h-screen">
       {/* Message list */}
-      <div className="w-80 border-r border-border bg-card flex flex-col shrink-0">
-        <div className="p-4 border-b border-border">
+      <div className="w-[380px] border-r border-border bg-card flex flex-col shrink-0">
+        <div className="p-4 border-b border-border space-y-4">
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-bold">Inbox</h1>
             {unreadCount > 0 && (
               <Badge variant="default" data-testid="badge-unread-count">{unreadCount} unread</Badge>
             )}
           </div>
+          <div className="grid grid-cols-3 gap-2">
+            <Card className="bg-muted/30">
+              <CardContent className="p-3">
+                <p className="text-xs text-muted-foreground">Positive</p>
+                <p className="text-lg font-bold text-green-500">{positiveCount}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-muted/30">
+              <CardContent className="p-3">
+                <p className="text-xs text-muted-foreground">Neutral</p>
+                <p className="text-lg font-bold">{neutralCount}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-muted/30">
+              <CardContent className="p-3">
+                <p className="text-xs text-muted-foreground">Negative</p>
+                <p className="text-lg font-bold text-destructive">{negativeCount}</p>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search replies"
+              className="pl-9"
+              data-testid="input-inbox-search"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["all", "positive", "neutral", "negative"] as const).map((value) => (
+              <Button
+                key={value}
+                type="button"
+                variant={sentimentFilter === value ? "default" : "outline"}
+                size="sm"
+                className="capitalize"
+                onClick={() => setSentimentFilter(value)}
+              >
+                {value}
+              </Button>
+            ))}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="p-4 text-center text-muted-foreground text-sm">Loading...</div>
-          ) : messages?.length === 0 ? (
+          ) : filteredMessages?.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-16 px-4 text-muted-foreground">
               <InboxIcon className="h-8 w-8 opacity-30" />
-              <p className="text-sm text-center">No messages yet. Replies from your campaigns will appear here.</p>
+              <p className="text-sm text-center">No replies match this view.</p>
             </div>
-          ) : messages?.map(msg => (
+          ) : filteredMessages?.map(msg => (
             <button
               key={msg.id}
               onClick={() => { setSelected(msg.id); markRead(msg.id); }}
