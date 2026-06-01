@@ -1,7 +1,8 @@
 import { useGetAnalyticsSummary, useGetDailyAnalytics, useListCampaigns } from "@workspace/api-client-react";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { AlertCircle, AlertTriangle, Mail, MessageSquare, MousePointer, TrendingUp } from "lucide-react";
+import { AlertCircle, AlertTriangle, Mail, MessageSquare, MousePointer, Send, TrendingUp } from "lucide-react";
 
 function StatCard({ label, value, sub, detail, icon: Icon }: { label: string; value: string; sub?: string; detail?: string; icon: React.ElementType }) {
   return (
@@ -24,6 +25,11 @@ export default function Analytics() {
   const { data: daily, isLoading: isLoadingDaily, error: dailyError } = useGetDailyAnalytics();
   const { data: campaigns } = useListCampaigns();
   const activeCampaignNames = summary?.activeCampaignNames ?? [];
+  const totalSent = summary?.totalSent ?? 0;
+  const totalOpened = summary?.totalOpened ?? 0;
+  const totalReplied = summary?.totalReplied ?? 0;
+  const totalBounced = summary?.totalBounced ?? 0;
+  const totalClicked = campaigns?.reduce((sum, campaign) => sum + (campaign.clickCount ?? 0), 0) ?? 0;
 
   const topCampaigns = campaigns
     ?.filter(c => (c.sentCount ?? 0) > 0)
@@ -36,10 +42,17 @@ export default function Analytics() {
     .slice(0, 5);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-        <p className="text-sm text-muted-foreground mt-1">Overall performance across all campaigns</p>
+    <div className="p-8 max-w-[1500px] mx-auto space-y-8">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+          <p className="text-sm text-muted-foreground mt-1">Overall performance across all campaigns</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary">{summary?.activeCampaigns ?? 0} active campaigns</Badge>
+          <Badge variant="outline">{summary?.activeAccounts ?? 0} sendable accounts</Badge>
+          <Badge variant="outline">{totalClicked.toLocaleString()} tracked clicks</Badge>
+        </div>
       </div>
 
       {isLoadingSummary ? (
@@ -62,7 +75,7 @@ export default function Analytics() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <StatCard
               label="Total Sent"
-              value={(summary?.totalSent ?? 0).toLocaleString()}
+              value={totalSent.toLocaleString()}
               sub="Sent email jobs"
               detail="Source: sent email jobs, not campaign setup counts."
               icon={Mail}
@@ -70,27 +83,27 @@ export default function Analytics() {
             <StatCard
               label="Open Rate"
               value={`${summary?.openRate ?? 0}%`}
-              sub={`${summary?.totalOpened ?? 0} opened of ${summary?.totalSent ?? 0} sent`}
+              sub={`${totalOpened} opened of ${totalSent} sent`}
               detail="Source: tracking pixel opens, plus clicks and replies that prove the email was opened."
               icon={TrendingUp}
             />
             <StatCard
               label="Reply Rate"
               value={`${summary?.replyRate ?? 0}%`}
-              sub={`${summary?.totalReplied ?? 0} replied of ${summary?.totalSent ?? 0} sent`}
+              sub={`${totalReplied} replied of ${totalSent} sent`}
               detail="Source: inbox polling matched replies back to sent messages."
               icon={MessageSquare}
             />
             <StatCard
               label="Bounce Rate"
               value={`${summary?.bounceRate ?? 0}%`}
-              sub={`${summary?.totalBounced ?? 0} bounced of ${summary?.totalSent ?? 0} sent`}
+              sub={`${totalBounced} bounced of ${totalSent} sent`}
               detail="Source: SMTP send failures and delivery failure replies."
               icon={AlertTriangle}
             />
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1.3fr]">
             <Card>
               <CardHeader><CardTitle className="text-sm font-medium text-muted-foreground">Active Campaigns</CardTitle></CardHeader>
               <CardContent>
@@ -104,11 +117,38 @@ export default function Analytics() {
             </Card>
             <Card>
               <CardHeader><CardTitle className="text-sm font-medium text-muted-foreground">Active Accounts</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">{summary?.activeAccounts ?? 0}</div></CardContent>
+              <CardContent>
+                <div className="flex items-center gap-3">
+                  <Send className="h-5 w-5 text-primary" />
+                  <div className="text-2xl font-bold">{summary?.activeAccounts ?? 0}</div>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">Mailboxes currently eligible to send.</p>
+              </CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle className="text-sm font-medium text-muted-foreground">Total Replies</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">{(summary?.totalReplied ?? 0).toLocaleString()}</div></CardContent>
+              <CardHeader><CardTitle className="text-sm font-medium text-muted-foreground">Funnel Snapshot</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                {[
+                  { label: "Sent", value: totalSent, icon: Mail },
+                  { label: "Opened", value: totalOpened, icon: TrendingUp },
+                  { label: "Clicked", value: totalClicked, icon: MousePointer },
+                  { label: "Replied", value: totalReplied, icon: MessageSquare },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const width = totalSent > 0 ? Math.max(6, Math.min(100, (item.value / totalSent) * 100)) : 0;
+                  return (
+                    <div key={item.label} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-2 text-muted-foreground"><Icon className="h-3.5 w-3.5" />{item.label}</span>
+                        <span className="font-semibold">{item.value.toLocaleString()}</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${width}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
             </Card>
           </div>
 
@@ -159,29 +199,41 @@ export default function Analytics() {
         </CardContent>
       </Card>
 
-      {topCampaigns && topCampaigns.length > 0 && (
+      <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+        {topCampaigns && topCampaigns.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Top Campaigns by Reply Rate</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {topCampaigns.map(c => (
+                  <div key={c.id} className="flex items-center justify-between py-2 border-b border-border last:border-0" data-testid={`row-top-campaign-${c.id}`}>
+                    <div>
+                      <p className="font-medium text-sm">{c.name}</p>
+                      <p className="text-xs text-muted-foreground">{c.sentCount} sent · {c.openRate}% opens</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-sm">{c.replyRate}%</p>
+                      <p className="text-xs text-muted-foreground">reply rate</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardHeader>
-            <CardTitle>Top Campaigns by Reply Rate</CardTitle>
+            <CardTitle>Tracking Notes</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {topCampaigns.map(c => (
-                <div key={c.id} className="flex items-center justify-between py-2 border-b border-border last:border-0" data-testid={`row-top-campaign-${c.id}`}>
-                  <div>
-                    <p className="font-medium text-sm">{c.name}</p>
-                    <p className="text-xs text-muted-foreground">{c.sentCount} sent · {c.openRate}% opens</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-sm">{c.replyRate}%</p>
-                    <p className="text-xs text-muted-foreground">reply rate</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <p>Clicks and replies count as confirmed opens, so open rate should never sit below confirmed engagement.</p>
+            <p>Bounces are counted from SMTP failures and inbox delivery-failure replies.</p>
+            <p>Test activity can skew best-hour and best-day insights until excluded at the source.</p>
           </CardContent>
         </Card>
-      )}
+      </div>
     </div>
   );
 }

@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ArrowLeft } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, CalendarClock, CheckCircle2, MailPlus, MousePointerClick, Route, ShieldCheck } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "@/hooks/use-toast";
 
@@ -59,6 +60,12 @@ export default function NewCampaign() {
     },
   });
 
+  const batchSize = form.watch("batchSize") || 1;
+  const batchIntervalMinutes = form.watch("batchIntervalMinutes") || 60;
+  const dailyLimit = form.watch("dailyLimit");
+  const staggerMinutes = Math.max(1, Math.round(batchIntervalMinutes / Math.max(batchSize, 1)));
+  const estimatedDailyVolume = dailyLimit || "Mailbox capped";
+
   function onSubmit(values: FormValues) {
     const scheduled = values.scheduledStartAt
       ? new Date(values.scheduledStartAt).toISOString()
@@ -80,7 +87,7 @@ export default function NewCampaign() {
   }
 
   return (
-    <div className="p-8 max-w-2xl mx-auto space-y-6">
+    <div className="p-8 max-w-[1200px] mx-auto space-y-6">
       <div className="flex items-center gap-3">
         <Link href="/campaigns">
           <Button variant="ghost" size="icon" data-testid="button-back">
@@ -89,13 +96,36 @@ export default function NewCampaign() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">New Campaign</h1>
-          <p className="text-sm text-muted-foreground">Set up a new cold email campaign</p>
+          <p className="text-sm text-muted-foreground">Create the shell, then add sequence steps and leads.</p>
         </div>
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <Card>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-6">
+            <div className="grid gap-3 md:grid-cols-4">
+              {[
+                { label: "Basics", icon: MailPlus },
+                { label: "Cadence", icon: CalendarClock },
+                { label: "Tracking", icon: MousePointerClick },
+                { label: "Launch", icon: ShieldCheck },
+              ].map((step, index) => {
+                const Icon = step.icon;
+                return (
+                  <div key={step.label} className="rounded-lg border border-border bg-card/70 p-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      {step.label}
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">Step {index + 1}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <Card>
             <CardHeader>
               <CardTitle>Campaign Details</CardTitle>
               <CardDescription>Basic information about your campaign</CardDescription>
@@ -208,9 +238,9 @@ export default function NewCampaign() {
                 )}
               />
             </CardContent>
-          </Card>
+            </Card>
 
-          <Card>
+            <Card>
             <CardHeader>
               <CardTitle>Tracking</CardTitle>
               <CardDescription>Configure what gets tracked for this campaign</CardDescription>
@@ -262,16 +292,55 @@ export default function NewCampaign() {
                 )}
               />
             </CardContent>
-          </Card>
+            </Card>
 
-          <div className="flex justify-end gap-3">
-            <Link href="/campaigns">
-              <Button variant="outline" type="button" data-testid="button-cancel">Cancel</Button>
-            </Link>
-            <Button type="submit" disabled={create.isPending} data-testid="button-create-campaign">
-              {create.isPending ? "Creating..." : "Create Campaign"}
-            </Button>
+            <div className="flex justify-end gap-3">
+              <Link href="/campaigns">
+                <Button variant="outline" type="button" data-testid="button-cancel">Cancel</Button>
+              </Link>
+              <Button type="submit" disabled={create.isPending} data-testid="button-create-campaign">
+                {create.isPending ? "Creating..." : "Create Campaign"}
+              </Button>
+            </div>
           </div>
+
+          <aside className="space-y-4">
+            <Card className="sticky top-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Route className="h-4 w-4 text-primary" />
+                  Launch Readiness
+                </CardTitle>
+                <CardDescription>What happens after this campaign shell is created.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Cadence preview</p>
+                  <p className="mt-2 text-2xl font-bold">{batchSize} per batch</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Staggered about every {staggerMinutes} min across a {batchIntervalMinutes} min interval.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge variant="secondary">Daily: {estimatedDailyVolume}</Badge>
+                    <Badge variant="outline">Mailbox limits still win</Badge>
+                  </div>
+                </div>
+
+                {[
+                  "Create sequence steps",
+                  "Attach leads or labels",
+                  "Confirm mailbox pool",
+                  "Review send window",
+                  "Launch when ready",
+                ].map((item) => (
+                  <div key={item} className="flex items-center gap-3 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </aside>
         </form>
       </Form>
     </div>
