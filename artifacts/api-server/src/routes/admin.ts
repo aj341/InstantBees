@@ -1,11 +1,6 @@
 import { Router, type IRouter } from "express";
-import Database from "better-sqlite3";
-import fs from "node:fs";
-import path from "node:path";
 import {
   db,
-  databasePath,
-  sqlite,
   campaignsTable,
   campaignLeadsTable,
   sequenceStepsTable,
@@ -23,26 +18,6 @@ import {
 import { ResetAllDataBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
-
-function unlinkIfExists(filePath: string): void {
-  try {
-    fs.unlinkSync(filePath);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-  }
-}
-
-function validateSqliteFile(filePath: string): void {
-  const candidate = new Database(filePath, { readonly: true, fileMustExist: true });
-  try {
-    const result = candidate.prepare("PRAGMA integrity_check").get() as { integrity_check: string } | undefined;
-    if (result?.integrity_check !== "ok") {
-      throw new Error(`SQLite integrity check failed: ${result?.integrity_check ?? "unknown"}`);
-    }
-  } finally {
-    candidate.close();
-  }
-}
 
 /**
  * Wipe all operational data so the dashboard reflects a clean slate.
@@ -77,52 +52,6 @@ router.post("/admin/reset", async (req, res): Promise<void> => {
   });
 
   res.json({ ok: true });
-});
-
-router.post("/admin/database/restore", async (req, res): Promise<void> => {
-  const body = req.body as { confirm?: string; databaseBase64?: string } | undefined;
-  if (body?.confirm !== "RESTORE_SQLITE_DATABASE") {
-    res.status(400).json({ error: "Missing restore confirmation" });
-    return;
-  }
-  if (!body.databaseBase64 || typeof body.databaseBase64 !== "string") {
-    res.status(400).json({ error: "databaseBase64 is required" });
-    return;
-  }
-
-  const raw = Buffer.from(body.databaseBase64, "base64");
-  if (raw.subarray(0, 16).toString("utf8") !== "SQLite format 3\0") {
-    res.status(400).json({ error: "Uploaded file is not a SQLite database" });
-    return;
-  }
-
-  const dir = path.dirname(databasePath);
-  const restoreId = Date.now();
-  const tempPath = path.join(dir, `sales-automation.restore-${restoreId}.sqlite`);
-  const backupPath = `${databasePath}.backup-${restoreId}`;
-  fs.writeFileSync(tempPath, raw, { mode: 0o600 });
-
-  try {
-    validateSqliteFile(tempPath);
-  } catch (err) {
-    unlinkIfExists(tempPath);
-    res.status(400).json({ error: err instanceof Error ? err.message : "Invalid SQLite database" });
-    return;
-  }
-
-  res.json({ ok: true, restarting: true });
-
-  setTimeout(() => {
-    try {
-      sqlite.close();
-      if (fs.existsSync(databasePath)) fs.copyFileSync(databasePath, backupPath);
-      unlinkIfExists(`${databasePath}-wal`);
-      unlinkIfExists(`${databasePath}-shm`);
-      fs.renameSync(tempPath, databasePath);
-    } finally {
-      process.exit(0);
-    }
-  }, 100);
 });
 
 export default router;
