@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, campaignsTable, sequenceStepsTable, sequenceStepVariantsTable, campaignLeadsTable, leadsTable, leadListsTable, listLeadsTable } from "@workspace/db";
 import { attachmentsJson } from "../../lib/email-attachments";
+import { prioritizeCampaignLeads } from "../../lib/queue-priority";
 
 const router: IRouter = Router();
 
@@ -86,6 +87,25 @@ router.post("/campaigns/:id/pause", async (req, res): Promise<void> => {
   const [row] = await db.update(campaignsTable).set({ status: "paused" }).where(eq(campaignsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Campaign not found" } }); return; }
   res.json({ id: row.id, status: row.status, message: "Campaign paused" });
+});
+
+// POST /api/v1/campaigns/:id/prioritize — move selected leads' next pending sends to the front of the queue.
+router.post("/campaigns/:id/prioritize", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: { code: "INVALID_INPUT", message: "Invalid campaign id" } });
+    return;
+  }
+  const result = await prioritizeCampaignLeads(id, {
+    leadIds: Array.isArray(req.body?.leadIds) ? req.body.leadIds : undefined,
+    emails: Array.isArray(req.body?.emails) ? req.body.emails : undefined,
+    limit: req.body?.limit,
+  });
+  if (!result) {
+    res.status(404).json({ error: { code: "NOT_FOUND", message: "Campaign not found" } });
+    return;
+  }
+  res.json(result);
 });
 
 // POST /api/v1/campaigns/:id/stop

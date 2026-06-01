@@ -14,6 +14,7 @@ import {
 import { getCampaignMetrics, getGlobalMetrics, rate } from "../lib/stats";
 import { getSendableAccounts } from "../lib/account-rotation";
 import { nextSendWindowAt } from "../lib/sending-window";
+import { prioritizeCampaignLeads } from "../lib/queue-priority";
 
 const router: IRouter = Router();
 
@@ -337,6 +338,25 @@ router.post("/campaigns/:id/pause", async (req, res): Promise<void> => {
     return;
   }
   res.json(campaign);
+});
+
+router.post("/campaigns/:id/prioritize", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid campaign id" });
+    return;
+  }
+  const result = await prioritizeCampaignLeads(id, {
+    leadIds: Array.isArray(req.body?.leadIds) ? req.body.leadIds : undefined,
+    emails: Array.isArray(req.body?.emails) ? req.body.emails : undefined,
+    limit: req.body?.limit,
+  });
+  if (!result) {
+    res.status(404).json({ error: "Campaign not found" });
+    return;
+  }
+  res.json(result);
 });
 
 router.get("/campaigns/:id/link-clicks", async (req, res): Promise<void> => {
