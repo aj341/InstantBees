@@ -21,6 +21,15 @@ import { isExcludedAnalyticsEmail } from "../lib/analytics-exclusions";
 
 const router: IRouter = Router();
 
+function envInt(name: string, fallback: number): number {
+  const value = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+const ACCOUNT_CAMPAIGN_COOLDOWN_MS = envInt("ACCOUNT_CAMPAIGN_COOLDOWN_MINUTES", 180) * 60_000;
+const ACCOUNT_CAMPAIGN_COOLDOWN_JITTER_MS = envInt("ACCOUNT_CAMPAIGN_COOLDOWN_JITTER_MINUTES", 30) * 60_000;
+const ACCOUNT_CAMPAIGN_DAILY_LIMIT = envInt("ACCOUNT_CAMPAIGN_DAILY_LIMIT", 5);
+
 function toIso(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -65,6 +74,16 @@ function campaignBatchSettings(campaign: Pick<typeof campaignsTable.$inferSelect
   };
 }
 
+function stableJitterMs(accountId: number, campaignId: number, sentAt: Date): number {
+  const basis = `${accountId}:${campaignId}:${sentAt.getTime()}`;
+  let hash = 0;
+  for (let i = 0; i < basis.length; i += 1) {
+    hash = ((hash << 5) - hash + basis.charCodeAt(i)) | 0;
+  }
+  const range = ACCOUNT_CAMPAIGN_COOLDOWN_JITTER_MS * 2;
+  return Math.abs(hash) % (range + 1) - ACCOUNT_CAMPAIGN_COOLDOWN_JITTER_MS;
+}
+
 function localDateKey(date: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
@@ -96,12 +115,19 @@ function estimateReadyForMoreAt(
 
   const initialSentByAccountDay = new Map<string, number>();
   const initialSentByCampaignDay = new Map<string, number>();
+  const initialSentByAccountCampaignDay = new Map<string, number>();
+  const initialLastSentByAccountCampaign = new Map<string, Date>();
   for (const job of jobs) {
     if (!sentLike(job) || !job.sentAt) continue;
     const day = localDateKey(job.sentAt, timezone);
     if (job.accountId) {
       const accountKey = `${job.accountId}:${day}`;
       initialSentByAccountDay.set(accountKey, (initialSentByAccountDay.get(accountKey) ?? 0) + 1);
+      const accountCampaignDayKey = `${job.accountId}:${job.campaignId}:${day}`;
+      initialSentByAccountCampaignDay.set(accountCampaignDayKey, (initialSentByAccountCampaignDay.get(accountCampaignDayKey) ?? 0) + 1);
+      const accountCampaignKey = `${job.accountId}:${job.campaignId}`;
+      const existingLast = initialLastSentByAccountCampaign.get(accountCampaignKey);
+      if (!existingLast || job.sentAt > existingLast) initialLastSentByAccountCampaign.set(accountCampaignKey, job.sentAt);
     }
     const campaignKey = `${job.campaignId}:${day}`;
     initialSentByCampaignDay.set(campaignKey, (initialSentByCampaignDay.get(campaignKey) ?? 0) + 1);
@@ -109,6 +135,8 @@ function estimateReadyForMoreAt(
 
   const simulatedByAccountDay = new Map<string, number>();
   const simulatedByCampaignDay = new Map<string, number>();
+  const simulatedByAccountCampaignDay = new Map<string, number>();
+  const simulatedLastSentByAccountCampaign = new Map<string, Date>();
   const effectiveLimitForAccountAt = (account: typeof emailAccountsTable.$inferSelect, at: Date): number => {
     const daily = Math.max(1, account.dailySendLimit ?? 50);
     if (!account.warmupEnabled && account.status !== "warming") return daily;
@@ -127,6 +155,18 @@ function estimateReadyForMoreAt(
     const alreadySent = (initialSentByCampaignDay.get(key) ?? 0) + (simulatedByCampaignDay.get(key) ?? 0);
     return Math.max(0, campaign.dailyLimit - alreadySent);
   };
+  const accountCampaignHasCapacity = (account: typeof emailAccountsTable.$inferSelect, at: Date): boolean => {
+    const day = localDateKey(at, timezone);
+    const dayKey = `${account.id}:${campaign.id}:${day}`;
+    const sentToday = (initialSentByAccountCampaignDay.get(dayKey) ?? 0) + (simulatedByAccountCampaignDay.get(dayKey) ?? 0);
+    if (sentToday >= ACCOUNT_CAMPAIGN_DAILY_LIMIT) return false;
+
+    const key = `${account.id}:${campaign.id}`;
+    const lastSent = simulatedLastSentByAccountCampaign.get(key) ?? initialLastSentByAccountCampaign.get(key);
+    if (!lastSent) return true;
+    const nextAt = new Date(lastSent.getTime() + ACCOUNT_CAMPAIGN_COOLDOWN_MS + stableJitterMs(account.id, campaign.id, lastSent));
+    return nextAt <= at;
+  };
 
   let remainingQueued = queuedCount;
   let cursor = nextSendWindowAt(start, campaign);
@@ -136,7 +176,9 @@ function estimateReadyForMoreAt(
   for (let guard = 0; guard < 60 * 24 * 90 && remainingQueued > 0; guard += 1) {
     cursor = nextSendWindowAt(cursor, campaign);
     const day = localDateKey(cursor, timezone);
-    const accountsWithCapacity = sendableAccounts.filter((account) => remainingForAccount(account, cursor) > 0);
+    const accountsWithCapacity = sendableAccounts.filter((account) => (
+      remainingForAccount(account, cursor) > 0 && accountCampaignHasCapacity(account, cursor)
+    ));
     const campaignRemaining = remainingForCampaign(cursor);
     const slotCapacity = Math.max(0, Math.min(1, accountsWithCapacity.length, campaignRemaining, remainingQueued));
     lastCapacityPerSlot = slotCapacity > 0 ? 1 : 0;
@@ -147,6 +189,9 @@ function estimateReadyForMoreAt(
       const account = accountsWithCapacity[guard % accountsWithCapacity.length] ?? accountsWithCapacity[0];
       const key = `${account.id}:${day}`;
       simulatedByAccountDay.set(key, (simulatedByAccountDay.get(key) ?? 0) + 1);
+      const accountCampaignDayKey = `${account.id}:${campaign.id}:${day}`;
+      simulatedByAccountCampaignDay.set(accountCampaignDayKey, (simulatedByAccountCampaignDay.get(accountCampaignDayKey) ?? 0) + 1);
+      simulatedLastSentByAccountCampaign.set(`${account.id}:${campaign.id}`, cursor);
       const campaignKey = `${campaign.id}:${day}`;
       simulatedByCampaignDay.set(campaignKey, (simulatedByCampaignDay.get(campaignKey) ?? 0) + slotCapacity);
       remainingQueued -= slotCapacity;
