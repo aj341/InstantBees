@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,6 @@ export default function Login() {
           <div className="mb-3 rounded-md bg-white px-4 py-3">
             <img src="/instant-bees-logo.png" alt="Instant Bees" className="h-auto w-full" />
           </div>
-          <CardTitle className="text-2xl">Instant Bees</CardTitle>
           <CardDescription>Sign in to continue.</CardDescription>
         </CardHeader>
         <CardContent>

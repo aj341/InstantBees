@@ -1,7 +1,7 @@
 import { useGetAnalyticsSummary, useGetDailyAnalytics, useListCampaigns } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { AlertCircle, AlertTriangle, CheckCircle2, Mail, MessageSquare, MousePointer, TrendingUp } from "lucide-react";
+import { AlertCircle, AlertTriangle, Mail, MessageSquare, MousePointer, TrendingUp } from "lucide-react";
 
 function StatCard({ label, value, sub, detail, icon: Icon }: { label: string; value: string; sub?: string; detail?: string; icon: React.ElementType }) {
   return (
@@ -19,26 +19,11 @@ function StatCard({ label, value, sub, detail, icon: Icon }: { label: string; va
   );
 }
 
-function SetupRow({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
-  const Icon = ok ? CheckCircle2 : AlertCircle;
-  return (
-    <div className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-3">
-      <Icon className={`mt-0.5 h-4 w-4 ${ok ? "text-emerald-400" : "text-amber-400"}`} />
-      <div>
-        <p className="text-sm font-medium">{label}</p>
-        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{detail}</p>
-      </div>
-    </div>
-  );
-}
-
 export default function Analytics() {
   const { data: summary, isLoading: isLoadingSummary, error: summaryError } = useGetAnalyticsSummary();
   const { data: daily, isLoading: isLoadingDaily, error: dailyError } = useGetDailyAnalytics();
   const { data: campaigns } = useListCampaigns();
   const activeCampaignNames = summary?.activeCampaignNames ?? [];
-  const hasPublicTrackingUrl = summary?.publicTrackingUrl ?? false;
-  const inboxPollingOk = (summary?.activeAccounts ?? 0) > 0 && (summary?.inboxPollingErrors ?? 0) === 0;
 
   const topCampaigns = campaigns
     ?.filter(c => (c.sentCount ?? 0) > 0)
@@ -127,37 +112,6 @@ export default function Analytics() {
             </Card>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Tracking Setup</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2">
-              <SetupRow
-                label="Open tracking"
-                ok={hasPublicTrackingUrl}
-                detail={hasPublicTrackingUrl
-                  ? `Pixels use ${summary?.publicBaseUrl}, which should be reachable by recipients. Clicks and replies also count as confirmed opens.`
-                  : `Pixels currently use ${summary?.publicBaseUrl ?? "the local app URL"}. Recipients outside this machine cannot report pixel opens until PUBLIC_BASE_URL is public, but clicks and replies still count as confirmed opens.`}
-              />
-              <SetupRow
-                label="Reply and bounce tracking"
-                ok={inboxPollingOk}
-                detail={inboxPollingOk
-                  ? `Inbox polling is active${summary?.lastInboxPollAt ? `; last checked ${new Date(summary.lastInboxPollAt).toLocaleString()}` : ""}.`
-                  : "Connect an account with working IMAP credentials; replies and delivery failure notices are matched from the inbox."}
-              />
-              <SetupRow
-                label="Active campaign count"
-                ok={(summary?.activeCampaigns ?? 0) > 0}
-                detail={`Counts campaigns where status is Active. Current active: ${activeCampaignNames.length ? activeCampaignNames.join(", ") : "none"}.`}
-              />
-              <SetupRow
-                label="Bounce rate"
-                ok={(summary?.totalBounced ?? 0) > 0 || inboxPollingOk}
-                detail="Bounces are counted when SMTP rejects a send or when a delivery failure email is matched back to a sent message."
-              />
-            </CardContent>
-          </Card>
         </>
       )}
 
