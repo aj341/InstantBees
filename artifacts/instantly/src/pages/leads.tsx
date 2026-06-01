@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -232,6 +233,13 @@ export default function Leads() {
     const ids = new Set(selectedLeadIds);
     return (leads ?? []).filter((lead) => ids.has(lead.id));
   }, [leads, selectedLeadIds]);
+  const leadStats = useMemo(() => {
+    const rows = leads ?? [];
+    const labelled = rows.filter((lead) => (lead.labels ?? []).length > 0).length;
+    const active = rows.filter((lead) => lead.status === "active").length;
+    const replied = rows.filter((lead) => lead.status === "replied").length;
+    return { total: rows.length, active, labelled, replied };
+  }, [leads]);
 
   function toggleLeadSelection(leadId: number, checked: boolean) {
     setSelectedLeadIds((current) => checked
@@ -276,11 +284,11 @@ export default function Leads() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-8 max-w-[1500px] mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Leads</h1>
-          <p className="text-sm text-muted-foreground mt-1">{leads?.length ?? 0} total leads</p>
+          <p className="text-sm text-muted-foreground mt-1">Search, segment, label, and inspect every prospect before they enter a campaign.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setManageLabelsOpen(true)} data-testid="button-manage-labels">
@@ -293,6 +301,25 @@ export default function Leads() {
             <Plus className="mr-2 h-4 w-4" /> Add Lead
           </Button>
         </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: "Total Leads", value: leadStats.total, icon: Users },
+          { label: "Active", value: leadStats.active, icon: CheckCircle2 },
+          { label: "Labelled", value: leadStats.labelled, icon: Tag },
+          { label: "Replied", value: leadStats.replied, icon: FileText },
+        ].map((item) => (
+          <Card key={item.label}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">{item.label}</CardTitle>
+              <item.icon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold">{item.value.toLocaleString()}</div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <div className="flex gap-2">

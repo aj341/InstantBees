@@ -60,7 +60,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type, FileText, Send, Braces, MousePointerClick, Clock, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type, FileText, Send, Braces, MousePointerClick, Clock, AlertTriangle, CheckCircle2, CalendarClock, ShieldCheck } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/email-editor/rich-text-editor";
@@ -417,6 +417,38 @@ export default function CampaignDetail() {
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading campaign...</div>;
   if (!campaign) return <div className="p-8 text-muted-foreground">Campaign not found.</div>;
 
+  const sendableAccounts = accounts?.filter((account) => account.status === "connected" || account.status === "warming") ?? [];
+  const launchChecklist = [
+    {
+      label: "Sequence ready",
+      detail: `${steps?.length ?? 0} email step${(steps?.length ?? 0) === 1 ? "" : "s"}`,
+      ok: (steps?.length ?? 0) > 0,
+    },
+    {
+      label: "Audience attached",
+      detail: `${campaign.leadsCount ?? 0} lead${campaign.leadsCount === 1 ? "" : "s"}`,
+      ok: (campaign.leadsCount ?? 0) > 0,
+    },
+    {
+      label: "Mailbox pool online",
+      detail: `${sendableAccounts.length} sendable mailbox${sendableAccounts.length === 1 ? "" : "es"}`,
+      ok: sendableAccounts.length > 0,
+    },
+    {
+      label: "Tracking configured",
+      detail: [campaign.trackOpens ? "opens" : null, campaign.trackClicks ? "clicks" : null].filter(Boolean).join(" + ") || "off",
+      ok: campaign.trackOpens || campaign.trackClicks,
+    },
+    {
+      label: "Send cadence set",
+      detail: `${campaign.batchSize ?? 25} over ${campaign.batchIntervalMinutes ?? 60} min`,
+      ok: (campaign.batchSize ?? 0) > 0 && (campaign.batchIntervalMinutes ?? 0) > 0,
+    },
+  ];
+  const launchReadyCount = launchChecklist.filter((item) => item.ok).length;
+  const slotMinutes = Number((((campaign.batchIntervalMinutes ?? 60) / Math.max(1, campaign.batchSize ?? 25))).toFixed(1));
+  const campaignWindow = campaign as typeof campaign & { sendWindowStart?: string | null; sendWindowEnd?: string | null };
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -496,6 +528,64 @@ export default function CampaignDetail() {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4 mt-4">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
+            <Card className="overflow-hidden">
+              <CardHeader className="border-b border-border bg-muted/20">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5 text-primary" />
+                      Launch Readiness
+                    </CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {launchReadyCount}/{launchChecklist.length} checks passing before this campaign sends.
+                    </p>
+                  </div>
+                  <Badge variant={launchReadyCount === launchChecklist.length ? "default" : "secondary"}>
+                    {launchReadyCount === launchChecklist.length ? "Ready" : "Needs review"}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-3 pt-4 sm:grid-cols-2 xl:grid-cols-5">
+                {launchChecklist.map((item) => (
+                  <div key={item.label} className="rounded-md border border-border bg-card p-3">
+                    <div className="flex items-center gap-2">
+                      {item.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4 text-amber-400" />}
+                      <span className="text-sm font-medium">{item.label}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CalendarClock className="h-5 w-5 text-primary" />
+                  Send Forecast
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Cadence</span>
+                  <span className="font-medium">{campaign.batchSize ?? 25} leads over {campaign.batchIntervalMinutes ?? 60} min</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Stagger</span>
+                  <span className="font-medium">about 1 send every {slotMinutes} min</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Send window</span>
+                  <span className="font-medium">{campaignWindow.sendWindowStart ?? "07:00"}-{campaignWindow.sendWindowEnd ?? "19:00"}</span>
+                </div>
+                <Link href="/growth" className="inline-flex text-primary hover:underline">
+                  Open full queue forecast
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+
           <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
             {[
               { label: "Sent", value: campaign.sentCount, icon: Mail },
@@ -573,7 +663,7 @@ export default function CampaignDetail() {
                 </div>
                 <div>
                   <dt className="text-muted-foreground">Batch Sending</dt>
-                  <dd className="font-medium">{campaign.batchSize ?? 25} every {campaign.batchIntervalMinutes ?? 60} min</dd>
+                  <dd className="font-medium">{campaign.batchSize ?? 25} staggered across {campaign.batchIntervalMinutes ?? 60} min</dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground">Reply-To</dt>
@@ -607,7 +697,7 @@ export default function CampaignDetail() {
                     </Button>
                   </dd>
                   <p className="text-xs text-muted-foreground">
-                    First box is leads per batch. Second box is minutes between batches. Pending emails are rescheduled when you save.
+                    First box is leads per interval. Second box is interval length. The app staggers sends inside that window and reschedules pending emails when you save.
                   </p>
                 </div>
                 <div className="col-span-2 space-y-2 rounded-md border border-border bg-muted/20 p-3">

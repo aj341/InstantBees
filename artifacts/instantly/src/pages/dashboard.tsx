@@ -18,6 +18,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,14 +30,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Activity, Mail, Users, Inbox, AlertTriangle } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Inbox, Mail, Plus, Rocket, Users } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { toast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 export default function Dashboard() {
   const { data: summary, isLoading: isLoadingSummary } = useGetAnalyticsSummary();
   const { data: dailyStats, isLoading: isLoadingDaily } = useGetDailyAnalytics();
   const { data: campaignStats, isLoading: isLoadingCampaigns } = useGetCampaignStats();
+  const { data: campaigns } = useListCampaigns();
   const queryClient = useQueryClient();
 
   const [resetOpen, setResetOpen] = useState(false);
@@ -67,9 +71,12 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="p-8 space-y-8 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+    <div className="p-8 space-y-8 max-w-[1500px] mx-auto">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">A live operating view of campaigns, sending volume, and what needs attention.</p>
+        </div>
         <Button
           variant="outline"
           className="text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -78,6 +85,46 @@ export default function Dashboard() {
         >
           <AlertTriangle className="mr-2 h-4 w-4" /> Reset all data
         </Button>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Rocket className="h-4 w-4 text-primary" />
+              Launch Next
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Link href="/campaigns/new">
+              <Button size="sm"><Plus className="mr-2 h-4 w-4" /> Campaign</Button>
+            </Link>
+            <Link href="/leads">
+              <Button size="sm" variant="outline">Import leads</Button>
+            </Link>
+            <Link href="/growth">
+              <Button size="sm" variant="outline">View capacity</Button>
+            </Link>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Active Accounts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-semibold">{summary?.activeAccounts ?? 0}</div>
+            <p className="mt-1 text-sm text-muted-foreground">Connected mailboxes available to the scheduler.</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Total Replies</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-semibold">{summary?.totalReplied ?? campaignStats?.totalReplies ?? 0}</div>
+            <p className="mt-1 text-sm text-muted-foreground">Replies matched by inbox polling.</p>
+          </CardContent>
+        </Card>
       </div>
 
       <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
@@ -179,6 +226,46 @@ export default function Dashboard() {
               <Line type="monotone" dataKey="opened" stroke="hsl(var(--chart-2))" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Campaign Health</CardTitle>
+          <Link href="/campaigns" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+            Open campaigns <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Campaign</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Leads</TableHead>
+                <TableHead>Sent</TableHead>
+                <TableHead>Replies</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(campaigns ?? []).slice(0, 6).map((campaign) => (
+                <TableRow key={campaign.id}>
+                  <TableCell className="font-medium">
+                    <Link href={`/campaigns/${campaign.id}`} className="hover:underline">{campaign.name}</Link>
+                  </TableCell>
+                  <TableCell><Badge variant={campaign.status === "active" ? "default" : "secondary"}>{campaign.status}</Badge></TableCell>
+                  <TableCell>{campaign.leadsCount ?? 0}</TableCell>
+                  <TableCell>{campaign.sentCount ?? 0}</TableCell>
+                  <TableCell>{campaign.replyCount ?? 0}</TableCell>
+                </TableRow>
+              ))}
+              {(campaigns ?? []).length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">No campaigns yet.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>

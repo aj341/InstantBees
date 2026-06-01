@@ -394,8 +394,18 @@ export default function Accounts() {
     bulkImport.mutate(text);
   }
 
+  const accountSummary = (() => {
+    const rows = accounts ?? [];
+    const sendable = rows.filter((account) => account.status === "connected" || account.status === "warming");
+    const effectiveCapacity = sendable.reduce((sum, account) => sum + effectiveDailyLimit(account), 0);
+    const sentToday = sendable.reduce((sum, account) => sum + (account.sentToday ?? 0), 0);
+    const warming = rows.filter((account) => account.status === "warming" || account.warmupEnabled).length;
+    const errors = rows.filter((account) => account.status === "error").length;
+    return { sendable: sendable.length, effectiveCapacity, sentToday, warming, errors };
+  })();
+
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-8 max-w-[1500px] mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Email Accounts</h1>
@@ -413,6 +423,59 @@ export default function Accounts() {
           </Button>
         </div>
       </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: "Sendable Mailboxes", value: accountSummary.sendable, sub: `${accounts?.length ?? 0} total connected`, icon: Mail },
+          { label: "Capacity Today", value: accountSummary.effectiveCapacity, sub: `${accountSummary.sentToday} already sent`, icon: Send },
+          { label: "Warmup Accounts", value: accountSummary.warming, sub: "weekday-based warmup caps", icon: Flame },
+          { label: "Needs Attention", value: accountSummary.errors, sub: "accounts in error state", icon: AlertCircle },
+        ].map((item) => (
+          <Card key={item.label}>
+            <CardContent className="pt-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm text-muted-foreground">{item.label}</p>
+                  <p className="mt-1 text-2xl font-semibold">{item.value.toLocaleString()}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.sub}</p>
+                </div>
+                <item.icon className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {(accounts ?? []).length > 0 && (
+        <Card>
+          <CardContent className="pt-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Mailbox Capacity Heatmap</p>
+                <p className="text-xs text-muted-foreground">Each bar shows sent today against the current warmup-adjusted limit.</p>
+              </div>
+              <Badge variant="secondary">{accountSummary.sentToday}/{accountSummary.effectiveCapacity} used</Badge>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {(accounts ?? []).map((account) => {
+                const limit = effectiveDailyLimit(account);
+                const pct = Math.min(100, Math.round(((account.sentToday ?? 0) / Math.max(1, limit)) * 100));
+                return (
+                  <div key={account.id} className="rounded-md border border-border bg-muted/20 p-2">
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="truncate">{account.email}</span>
+                      <span className="text-muted-foreground">{account.sentToday}/{limit}</span>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {isLoading ? (
         <div className="text-center py-16 text-muted-foreground">Loading accounts...</div>

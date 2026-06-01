@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Pencil, Trash2, FileText, Code2, Type, Braces } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Plus, Pencil, Trash2, FileText, Code2, Type, Braces } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/email-editor/rich-text-editor";
 import { EmailPreview } from "@/components/email-editor/email-preview";
@@ -42,6 +42,21 @@ type Template = {
   bodyType: string;
   createdAt: string;
 };
+
+const APPROVED_MERGE_TAGS = new Set([
+  "firstName",
+  "lastName",
+  "company",
+  "title",
+  "role_title",
+  "roleTitle",
+  "email",
+  "linkedinUrl",
+]);
+
+function mergeTagsFrom(value: string): string[] {
+  return Array.from(value.matchAll(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*\}\}/g)).map((match) => match[1] ?? "");
+}
 
 export default function Templates() {
   const queryClient = useQueryClient();
@@ -127,6 +142,11 @@ export default function Templates() {
       create.mutate({ data: values });
     }
   }
+
+  const watchedBody = form.watch("body") || "";
+  const watchedSubject = form.watch("subject") || "";
+  const mergeTags = Array.from(new Set([...mergeTagsFrom(watchedSubject), ...mergeTagsFrom(watchedBody)]));
+  const unknownTags = mergeTags.filter((tag) => !APPROVED_MERGE_TAGS.has(tag) && !tag.startsWith("customFields."));
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-6">
@@ -227,6 +247,28 @@ export default function Templates() {
                         <FormMessage />
                       </FormItem>
                     )} />
+                  </div>
+
+                  <div className="rounded-md border border-border bg-muted/20 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        {unknownTags.length === 0 ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4 text-amber-400" />}
+                        Merge tags
+                      </div>
+                      <Badge variant={unknownTags.length === 0 ? "secondary" : "outline"}>
+                        {mergeTags.length} used
+                      </Badge>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {["{{firstName}}", "{{company}}", "{{role_title}}", "{{customFields.hook}}", "{{linkedinUrl}}"].map((tag) => (
+                        <span key={tag} className="rounded border border-border bg-background px-2 py-0.5 font-mono text-[11px] text-muted-foreground">{tag}</span>
+                      ))}
+                    </div>
+                    {unknownTags.length > 0 && (
+                      <p className="mt-2 text-xs text-amber-300">
+                        Check unknown tag{unknownTags.length === 1 ? "" : "s"}: {unknownTags.map((tag) => `{{${tag}}}`).join(", ")}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between">
