@@ -45,7 +45,9 @@ function firstScheduledTimeForLead(
 ): Date {
   const { batchSize, batchIntervalMs } = campaignBatchSettings(campaign);
   const batchIndex = Math.floor(leadIndex / batchSize);
-  return nextSendWindowAt(new Date(baseTime + batchIndex * batchIntervalMs), campaign);
+  const slotIndex = leadIndex % batchSize;
+  const slotOffsetMs = Math.floor((batchIntervalMs / batchSize) * slotIndex);
+  return nextSendWindowAt(new Date(baseTime + batchIndex * batchIntervalMs + slotOffsetMs), campaign);
 }
 
 function followUpScheduledTime(previousStepAt: Date, delayDays: number, campaign: CampaignScheduleSettings): Date {
