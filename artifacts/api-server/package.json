@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "corepack pnpm run build && corepack pnpm run start",
     "build": "node ./build.mjs",
