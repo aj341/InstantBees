@@ -33,6 +33,11 @@ function normalizedEmails(values: unknown[] | undefined): string[] {
   return [...new Set(values.map((value) => String(value ?? "").trim().toLowerCase()).filter(Boolean))];
 }
 
+function positiveInt(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
 export async function prioritizeCampaignLeads(campaignId: number, input: PrioritizeInput): Promise<PrioritizeResult | null> {
   const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId));
   if (!campaign) return null;
@@ -107,11 +112,14 @@ export async function prioritizeCampaignLeads(campaignId: number, input: Priorit
   });
 
   const base = nextSendWindowAt(new Date(), campaign);
+  const batchSize = positiveInt(campaign.batchSize, 25);
+  const batchIntervalMs = positiveInt(campaign.batchIntervalMinutes, 60) * 60_000;
+  const slotIntervalMs = Math.max(1_000, Math.floor(batchIntervalMs / batchSize));
   for (const [index, job] of jobsToPrioritize.entries()) {
     await db
       .update(emailSendJobsTable)
       .set({
-        scheduledAt: new Date(base.getTime() + index),
+        scheduledAt: nextSendWindowAt(new Date(base.getTime() + index * slotIntervalMs), campaign),
         errorMessage: "Prioritized for next available sending slot",
       })
       .where(eq(emailSendJobsTable.id, job.id));

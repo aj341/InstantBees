@@ -55,6 +55,16 @@ function clampPositiveInt(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
+function campaignBatchSettings(campaign: Pick<typeof campaignsTable.$inferSelect, "batchSize" | "batchIntervalMinutes">): { batchSize: number; batchIntervalMs: number; slotIntervalMs: number } {
+  const batchSize = clampPositiveInt(campaign.batchSize, 25);
+  const batchIntervalMs = clampPositiveInt(campaign.batchIntervalMinutes, 60) * 60_000;
+  return {
+    batchSize,
+    batchIntervalMs,
+    slotIntervalMs: Math.max(1_000, Math.floor(batchIntervalMs / batchSize)),
+  };
+}
+
 function localDateKey(date: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
@@ -69,18 +79,20 @@ function localDateKey(date: Date, timezone: string): string {
 function estimateReadyForMoreAt(
   start: Date,
   queuedCount: number,
-  intervalMinutes: number,
   campaign: typeof campaignsTable.$inferSelect | null,
   accounts: Array<typeof emailAccountsTable.$inferSelect>,
   jobs: Array<typeof emailSendJobsTable.$inferSelect>,
-): { readyAt: Date | null; capacityPerSlot: number; dailyCapacity: number } {
-  if (queuedCount <= 0 || !campaign) return { readyAt: null, capacityPerSlot: 0, dailyCapacity: 0 };
+): { readyAt: Date | null; capacityPerSlot: number; dailyCapacity: number; capacityIntervalMinutes: number; capacitySlotMinutes: number } {
+  if (queuedCount <= 0 || !campaign) return { readyAt: null, capacityPerSlot: 0, dailyCapacity: 0, capacityIntervalMinutes: 0, capacitySlotMinutes: 0 };
 
   const timezone = campaign.sendWindowTimezone || "Australia/Sydney";
   const sendableAccounts = accounts.filter((account) => (
     (account.status === "connected" || account.status === "warming") && !!account.smtpPasswordEnc
   ));
-  if (sendableAccounts.length === 0) return { readyAt: null, capacityPerSlot: 0, dailyCapacity: 0 };
+  const { batchSize, batchIntervalMs, slotIntervalMs } = campaignBatchSettings(campaign);
+  const capacityIntervalMinutes = Math.round(batchIntervalMs / 60_000);
+  const capacitySlotMinutes = Number((slotIntervalMs / 60_000).toFixed(1));
+  if (sendableAccounts.length === 0) return { readyAt: null, capacityPerSlot: 0, dailyCapacity: 0, capacityIntervalMinutes, capacitySlotMinutes };
 
   const initialSentByAccountDay = new Map<string, number>();
   const initialSentByCampaignDay = new Map<string, number>();
@@ -126,21 +138,21 @@ function estimateReadyForMoreAt(
     const day = localDateKey(cursor, timezone);
     const accountsWithCapacity = sendableAccounts.filter((account) => remainingForAccount(account, cursor) > 0);
     const campaignRemaining = remainingForCampaign(cursor);
-    const slotCapacity = Math.max(0, Math.min(accountsWithCapacity.length, campaignRemaining, remainingQueued));
-    lastCapacityPerSlot = accountsWithCapacity.length;
-    dailyCapacity = sendableAccounts.reduce((total, account) => total + effectiveLimitForAccountAt(account, cursor), 0);
+    const slotCapacity = Math.max(0, Math.min(1, accountsWithCapacity.length, campaignRemaining, remainingQueued));
+    lastCapacityPerSlot = slotCapacity > 0 ? 1 : 0;
+    const accountDailyCapacity = sendableAccounts.reduce((total, account) => total + effectiveLimitForAccountAt(account, cursor), 0);
+    dailyCapacity = Math.min(accountDailyCapacity, campaign.dailyLimit || accountDailyCapacity);
 
     if (slotCapacity > 0) {
-      for (const account of accountsWithCapacity.slice(0, slotCapacity)) {
-        const key = `${account.id}:${day}`;
-        simulatedByAccountDay.set(key, (simulatedByAccountDay.get(key) ?? 0) + 1);
-      }
+      const account = accountsWithCapacity[guard % accountsWithCapacity.length] ?? accountsWithCapacity[0];
+      const key = `${account.id}:${day}`;
+      simulatedByAccountDay.set(key, (simulatedByAccountDay.get(key) ?? 0) + 1);
       const campaignKey = `${campaign.id}:${day}`;
       simulatedByCampaignDay.set(campaignKey, (simulatedByCampaignDay.get(campaignKey) ?? 0) + slotCapacity);
       remainingQueued -= slotCapacity;
     }
 
-    const nextCursor = new Date(cursor.getTime() + intervalMinutes * 60_000);
+    const nextCursor = new Date(cursor.getTime() + slotIntervalMs);
     cursor = nextSendWindowAt(nextCursor, campaign);
   }
 
@@ -148,6 +160,8 @@ function estimateReadyForMoreAt(
     readyAt: remainingQueued <= 0 ? cursor : null,
     capacityPerSlot: lastCapacityPerSlot,
     dailyCapacity,
+    capacityIntervalMinutes,
+    capacitySlotMinutes,
   };
 }
 
@@ -230,11 +244,9 @@ router.get("/growth/overview", async (_req, res): Promise<void> => {
     .map((campaignId) => campaignsById.get(campaignId))
     .filter((campaign): campaign is typeof campaignsTable.$inferSelect => !!campaign && campaign.status === "active");
   const queueCapacityCampaign = activeQueuedCampaigns[0] ?? campaigns.find((campaign) => campaign.status === "active") ?? null;
-  const capacityIntervalMinutes = clampPositiveInt(queueCapacityCampaign?.batchIntervalMinutes, 60);
   const readyForMore = estimateReadyForMoreAt(
     new Date(),
     queuedJobs.length,
-    capacityIntervalMinutes,
     queueCapacityCampaign,
     accounts,
     jobs,
@@ -668,7 +680,8 @@ router.get("/growth/overview", async (_req, res): Promise<void> => {
       readyForMoreAt: toIso(readyForMore.readyAt),
       capacityPerSlot: readyForMore.capacityPerSlot,
       dailyCapacity: readyForMore.dailyCapacity,
-      capacityIntervalMinutes,
+      capacityIntervalMinutes: readyForMore.capacityIntervalMinutes,
+      capacitySlotMinutes: readyForMore.capacitySlotMinutes,
     },
     sendCalendar,
     timeline: timelineEvents,

@@ -36,6 +36,7 @@ interface GrowthOverview {
     capacityPerSlot: number;
     dailyCapacity: number;
     capacityIntervalMinutes: number;
+    capacitySlotMinutes: number;
   };
   sendCalendar: CalendarRow[];
   timeline: TimelineRow[];
@@ -262,7 +263,7 @@ export default function Growth() {
 
   const queueClearsValue = fmtQueueFinish(data.queueSummary.readyForMoreAt);
   const queueClearsSub = data.queueSummary.queuedCount > 0
-    ? `${data.queueSummary.queuedCount.toLocaleString()}/${data.queueSummary.dailyCapacity.toLocaleString()} daily capacity; up to ${data.queueSummary.capacityPerSlot.toLocaleString()} every ${data.queueSummary.capacityIntervalMinutes} min`
+    ? `${data.queueSummary.queuedCount.toLocaleString()}/${data.queueSummary.dailyCapacity.toLocaleString()} daily capacity; ${data.queueSummary.capacityPerSlot.toLocaleString()} every ${data.queueSummary.capacitySlotMinutes || data.queueSummary.capacityIntervalMinutes} min`
     : "No due sends waiting";
 
   return (
