@@ -19,7 +19,10 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">Outreach.io</CardTitle>
+          <div className="mb-3 rounded-md bg-white px-4 py-3">
+            <img src="/instant-bees-logo.png" alt="Instant Bees" className="h-auto w-full" />
+          </div>
+          <CardTitle className="text-2xl">Instant Bees</CardTitle>
           <CardDescription>Sign in to continue.</CardDescription>
         </CardHeader>
         <CardContent>

@@ -168,8 +168,8 @@ router.post("/accounts/:id/test", async (req, res): Promise<void> => {
     await sendEmail(account, {
       to: account.email,
       toName: account.name,
-      subject: "Outreach.io connection test",
-      body: "This is a test email from Outreach.io to verify your SMTP connection is working.",
+      subject: "Instant Bees connection test",
+      body: "This is a test email from Instant Bees to verify your SMTP connection is working.",
       bodyType: "text",
     });
     await db

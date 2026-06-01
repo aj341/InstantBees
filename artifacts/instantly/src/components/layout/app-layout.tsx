@@ -23,8 +23,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       <aside className="w-64 border-r border-border bg-card flex flex-col hidden md:flex">
-        <div className="h-14 flex items-center px-4 font-bold text-primary text-xl border-b border-border">
-          Outreach.io
+        <div className="h-20 flex items-center px-4 border-b border-border">
+          <img
+            src="/instant-bees-logo.png"
+            alt="Instant Bees"
+            className="h-12 w-auto max-w-[190px] rounded-md bg-white px-3 py-2"
+          />
         </div>
         <nav className="flex-1 py-4 px-2 space-y-1">
           {NAV_ITEMS.map((item) => {
