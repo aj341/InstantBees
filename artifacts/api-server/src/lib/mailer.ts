@@ -2,6 +2,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 import { randomBytes, createHmac, timingSafeEqual } from "node:crypto";
 import type { EmailAccount } from "@workspace/db";
 import { decryptSecret } from "./crypto";
+import { mailAttachments } from "./email-attachments";
 
 export type AccountWithSecret = Pick<
   EmailAccount,
@@ -66,6 +67,8 @@ export function buildTransport(account: AccountWithSecret): Transporter {
 export interface SendInput {
   to: string;
   toName?: string | null;
+  fromName?: string | null;
+  replyTo?: string | null;
   subject: string;
   previewText?: string | null;
   body: string;
@@ -75,6 +78,7 @@ export interface SendInput {
   publicBaseUrl?: string;
   messageId?: string;
   trackClicks?: boolean;
+  attachmentsJson?: string | null;
 }
 
 const HTML_TAG_RE = /<\/?(?:p|div|span|br|a|b|i|u|strong|em|h[1-6]|ul|ol|li|table|tr|td|th|img|hr|body|html|font|center|blockquote)\b/i;
@@ -221,7 +225,8 @@ function buildTextFooter(text: string, unsubUrl: string | null): string {
 
 export async function sendEmail(account: AccountWithSecret, input: SendInput): Promise<{ messageId: string }> {
   const transport = buildTransport(account);
-  const fromHeader = account.name ? `"${account.name}" <${account.email}>` : account.email;
+  const displayName = input.fromName ?? account.name;
+  const fromHeader = displayName ? `"${displayName}" <${account.email}>` : account.email;
   const toHeader = input.toName ? `"${input.toName}" <${input.to}>` : input.to;
   const baseUrl = input.publicBaseUrl;
   const pixelUrl = input.trackingToken && baseUrl
@@ -239,12 +244,16 @@ export async function sendEmail(account: AccountWithSecret, input: SendInput): P
   const mailOptions: nodemailer.SendMailOptions = {
     from: fromHeader,
     to: toHeader,
+    replyTo: input.replyTo ?? undefined,
     subject: input.subject,
     headers: unsubUrl
       ? { "List-Unsubscribe": `<${unsubUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }
       : undefined,
   };
   if (input.messageId) mailOptions.messageId = input.messageId;
+  if (input.attachmentsJson) {
+    mailOptions.attachments = mailAttachments(input.attachmentsJson);
+  }
 
   // Always send both text and HTML parts. Plain-text bodies get wrapped in basic HTML so
   // Gmail/Outlook render them as a coherent message rather than collapsing them behind "…".
@@ -272,12 +281,39 @@ export async function verifyTransport(account: AccountWithSecret): Promise<void>
   await transport.verify();
 }
 
-const MERGE_RE = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
+export type MergeValue = string | number | boolean | null | undefined | Record<string, unknown>;
 
-export function renderMergeFields(template: string, vars: Record<string, string | null | undefined>): string {
+const MERGE_RE = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}/g;
+
+function escapeMergeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function lookupMergeValue(vars: Record<string, MergeValue>, key: string): unknown {
+  const parts = key.split(".");
+  let value: unknown = vars;
+  for (const part of parts) {
+    if (!value || typeof value !== "object" || !(part in value)) return undefined;
+    value = (value as Record<string, unknown>)[part];
+  }
+  return value;
+}
+
+export function renderMergeFields(
+  template: string,
+  vars: Record<string, MergeValue>,
+  options: { htmlEscape?: boolean } = {},
+): string {
   return template.replace(MERGE_RE, (_match, key: string) => {
-    const v = vars[key];
-    return v == null ? "" : String(v);
+    const value = lookupMergeValue(vars, key);
+    if (value === undefined || value === null || typeof value === "object") return "";
+    const rendered = String(value);
+    return options.htmlEscape ? escapeMergeHtml(rendered) : rendered;
   });
 }
 

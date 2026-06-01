@@ -14,6 +14,7 @@ import Accounts from "@/pages/accounts";
 import Inbox from "@/pages/inbox";
 import Analytics from "@/pages/analytics";
 import Templates from "@/pages/templates";
+import Growth from "@/pages/growth";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,7 @@ function Router() {
         <Route path="/accounts" component={Accounts} />
         <Route path="/inbox" component={Inbox} />
         <Route path="/analytics" component={Analytics} />
+        <Route path="/growth" component={Growth} />
         <Route path="/templates" component={Templates} />
         <Route component={NotFound} />
       </Switch>

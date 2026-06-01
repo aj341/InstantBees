@@ -1,14 +1,9 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startInboxWorker } from "./lib/inbox-worker";
 import { startSendWorker } from "./lib/worker";
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
+const rawPort = process.env["PORT"] ?? "8080";
 
 const port = Number(rawPort);
 
@@ -23,5 +18,15 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
-  startSendWorker();
+  if (process.env["DISABLE_SEND_WORKER"] === "1") {
+    logger.warn("Email send worker disabled by DISABLE_SEND_WORKER=1");
+  } else {
+    startSendWorker();
+  }
+
+  if (process.env["DISABLE_INBOX_WORKER"] === "1") {
+    logger.warn("Inbox worker disabled by DISABLE_INBOX_WORKER=1");
+  } else {
+    startInboxWorker();
+  }
 });

@@ -15,5 +15,7 @@ export interface EmailAccountUpdate {
   smtpHost?: string;
   smtpPort?: number;
   smtpUsername?: string;
+  imapHost?: string;
+  imapPort?: number;
   smtpPassword?: string;
 }

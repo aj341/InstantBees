@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Tag, CheckCircle2, ExternalLink, Mail, MousePointerClick, Reply, AlertTriangle, Send, Loader2 } from "lucide-react";
+import { Tag, CheckCircle2, ExternalLink, Mail, MousePointerClick, Reply, AlertTriangle, Send, Loader2, Clock } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 type LabelLite = Pick<Label, "id" | "name" | "color">;
@@ -47,6 +47,16 @@ const CAMPAIGN_BADGE: Record<string, "default" | "secondary" | "destructive" | "
   paused: "outline",
   completed: "secondary",
 };
+
+interface LeadTimelineEvent {
+  campaignId: number | null;
+  campaignName: string;
+  stepNumber: number | null;
+  subject: string;
+  eventType: string;
+  occurredAt: string | null;
+  detail: string;
+}
 
 function fmtDate(d: string | null | undefined): string {
   if (!d) return "—";
@@ -295,9 +305,12 @@ export function LeadDetailSheet({ lead, labels, open, onOpenChange }: Props) {
                     This lead hasn't been added to any campaigns yet.
                   </div>
                 ) : (
-                  activity.data.campaigns.map((c: LeadCampaignActivity) => (
-                    <CampaignActivityCard key={c.campaignId} c={c} />
-                  ))
+                  <>
+                    {activity.data.campaigns.map((c: LeadCampaignActivity) => (
+                      <CampaignActivityCard key={c.campaignId} c={c} />
+                    ))}
+                    <LeadTimeline events={(activity.data as { timeline?: LeadTimelineEvent[] }).timeline ?? []} />
+                  </>
                 )}
               </TabsContent>
             </Tabs>
@@ -305,6 +318,40 @@ export function LeadDetailSheet({ lead, labels, open, onOpenChange }: Props) {
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function LeadTimeline({ events }: { events: LeadTimelineEvent[] }) {
+  if (!events.length) return null;
+
+  return (
+    <div className="rounded-md border border-border bg-card p-4 space-y-3" data-testid="lead-activity-timeline">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <Clock className="h-4 w-4" /> Timeline
+      </div>
+      <div className="space-y-2">
+        {events.slice(0, 30).map((event, index) => (
+          <div key={`${event.eventType}-${event.occurredAt}-${index}`} className="flex gap-3 rounded-md bg-muted/30 p-3">
+            <Badge variant="secondary" className="h-fit capitalize">{event.eventType.replaceAll("_", " ")}</Badge>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium truncate">
+                  {event.campaignId ? (
+                    <Link href={`/campaigns/${event.campaignId}`} className="hover:underline">
+                      {event.campaignName}
+                    </Link>
+                  ) : event.campaignName}
+                </p>
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap">{fmtDate(event.occurredAt)}</span>
+              </div>
+              <p className="text-xs text-muted-foreground truncate">
+                {event.stepNumber ? `Step ${event.stepNumber} · ` : ""}{event.detail || event.subject}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

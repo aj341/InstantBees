@@ -18,6 +18,8 @@ const schema = z.object({
   fromName: z.string().optional(),
   replyTo: z.string().email("Must be a valid email").optional().or(z.literal("")),
   dailyLimit: z.coerce.number().min(1).max(10000).optional(),
+  batchSize: z.coerce.number().min(1).max(10000).default(25),
+  batchIntervalMinutes: z.coerce.number().min(1).max(1440).default(60),
   trackOpens: z.boolean().default(true),
   trackClicks: z.boolean().default(true),
   includeUnsubscribe: z.boolean().default(true),
@@ -51,6 +53,8 @@ export default function NewCampaign() {
       trackOpens: true,
       trackClicks: true,
       includeUnsubscribe: true,
+      batchSize: 25,
+      batchIntervalMinutes: 60,
       scheduledStartAt: "",
     },
   });
@@ -65,6 +69,8 @@ export default function NewCampaign() {
         fromName: values.fromName || undefined,
         replyTo: values.replyTo || undefined,
         dailyLimit: values.dailyLimit,
+        batchSize: values.batchSize,
+        batchIntervalMinutes: values.batchIntervalMinutes,
         trackOpens: values.trackOpens,
         trackClicks: values.trackClicks,
         includeUnsubscribe: values.includeUnsubscribe,
@@ -150,6 +156,36 @@ export default function NewCampaign() {
                   </FormItem>
                 )}
               />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="batchSize"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Batch Size</FormLabel>
+                      <FormControl>
+                        <Input type="number" min={1} placeholder="25" data-testid="input-batch-size" {...field} />
+                      </FormControl>
+                      <FormDescription>How many leads to queue per batch.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="batchIntervalMinutes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Batch Interval</FormLabel>
+                      <FormControl>
+                        <Input type="number" min={1} placeholder="60" data-testid="input-batch-interval" {...field} />
+                      </FormControl>
+                      <FormDescription>Minutes to wait between batches.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <FormField
                 control={form.control}
                 name="scheduledStartAt"

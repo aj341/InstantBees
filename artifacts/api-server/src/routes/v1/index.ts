@@ -5,6 +5,7 @@ import templatesRouter from "./templates.js";
 import campaignsRouter from "./campaigns.js";
 import mailboxesRouter from "./mailboxes.js";
 import analyticsRouter from "./analytics.js";
+import campaignPackagesRouter from "./campaign-packages.js";
 
 const router: IRouter = Router();
 
@@ -13,6 +14,7 @@ router.use(apiKeyAuth);
 router.use(contactsRouter);
 router.use(templatesRouter);
 router.use(campaignsRouter);
+router.use(campaignPackagesRouter);
 router.use(mailboxesRouter);
 router.use(analyticsRouter);
 

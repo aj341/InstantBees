@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -194,124 +195,114 @@ export default function Templates() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={(v) => { if (!v) closeDialog(); }}>
-        <DialogContent className="max-w-2xl flex flex-col max-h-[90vh]">
+        <DialogContent className="w-[min(1400px,95vw)] max-w-none flex flex-col max-h-[92vh]">
           <DialogHeader className="shrink-0">
             <DialogTitle>{editingTemplate ? "Edit Template" : "New Template"}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
-              <div className="overflow-y-auto flex-1 space-y-4 pr-1">
-              <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Template Name</FormLabel>
-                  <FormControl><Input placeholder="e.g. Cold intro email" data-testid="input-template-name" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <div className="grid flex-1 min-h-0 gap-4 pr-1 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.95fr)]">
+                <div className="flex min-w-0 min-h-0 flex-col gap-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <FormField control={form.control} name="name" render={({ field }) => (
+                      <FormItem className="sm:col-span-2">
+                        <FormLabel>Template Name</FormLabel>
+                        <FormControl><Input placeholder="e.g. Cold intro email" data-testid="input-template-name" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
 
-              <FormField control={form.control} name="previewText" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Preview Text <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
-                  <FormControl><Input placeholder="Short snippet shown next to the subject in the inbox preview" data-testid="input-template-preview-text" {...field} value={field.value ?? ""} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+                    <FormField control={form.control} name="subject" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Subject Line</FormLabel>
+                        <FormControl><Input placeholder="e.g. Quick question about {{company}}" data-testid="input-template-subject" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
 
-              <FormField control={form.control} name="subject" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Subject Line</FormLabel>
-                  <FormControl><Input placeholder="e.g. Quick question about {{company}}" data-testid="input-template-subject" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+                    <FormField control={form.control} name="previewText" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Preview Text <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                        <FormControl><Input placeholder="Short snippet shown next to the subject in the inbox preview" data-testid="input-template-preview-text" {...field} value={field.value ?? ""} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
 
-              <FormItem>
-                <div className="flex items-center justify-between">
-                  <FormLabel>Body</FormLabel>
-                  <div className="flex items-center gap-1 rounded-md border border-border bg-muted/30 p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setMode("text")}
-                      className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${editorMode === "text" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                      data-testid="toggle-template-text"
-                    >
-                      <Type className="h-3 w-3" /> Plain Text
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMode("rich")}
-                      className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${editorMode === "rich" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                      data-testid="toggle-template-html"
-                    >
-                      <Code2 className="h-3 w-3" /> Rich HTML
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMode("source")}
-                      className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${editorMode === "source" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                      data-testid="toggle-template-source"
-                    >
-                      <Braces className="h-3 w-3" /> HTML Source
-                    </button>
+                  <div className="flex items-center justify-between">
+                    <Label>Body</Label>
+                    <div className="flex items-center gap-1 rounded-md border border-border bg-muted/30 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setMode("text")}
+                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${editorMode === "text" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                        data-testid="toggle-template-text"
+                      >
+                        <Type className="h-3 w-3" /> Plain Text
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMode("rich")}
+                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${editorMode === "rich" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                        data-testid="toggle-template-html"
+                      >
+                        <Code2 className="h-3 w-3" /> Rich HTML
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMode("source")}
+                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${editorMode === "source" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                        data-testid="toggle-template-source"
+                      >
+                        <Braces className="h-3 w-3" /> HTML Source
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 min-h-0 rounded-md border border-border bg-card p-3">
+                    <FormField control={form.control} name="body" render={({ field }) => (
+                      <FormItem className="flex h-full min-h-0 flex-col">
+                        <FormControl className="flex-1 min-h-0">
+                          {editorMode === "rich" ? (
+                            <RichTextEditor
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="Write your email body here... Use {{firstName}}, {{company}}, etc. for personalization."
+                              data-testid="input-template-body"
+                            />
+                          ) : editorMode === "source" ? (
+                            <Textarea
+                              placeholder={"<!DOCTYPE html>\n<html>\n  <body>\n    Hi {{firstName}}, ...\n  </body>\n</html>"}
+                              className="h-full min-h-[360px] font-mono text-xs leading-relaxed resize-none"
+                              data-testid="input-template-body"
+                              {...field}
+                            />
+                          ) : (
+                            <Textarea
+                              placeholder={"Hi {{firstName}},\n\nI noticed {{company}} recently...\n\nBest,\n{{senderName}}"}
+                              className="h-full min-h-[360px] resize-none"
+                              data-testid="input-template-body"
+                              {...field}
+                            />
+                          )}
+                        </FormControl>
+                        {editorMode === "source" && (
+                          <p className="text-xs text-muted-foreground mt-2">Paste raw HTML. It will be sent exactly as written.</p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                   </div>
                 </div>
-              </FormItem>
-
-              <FormField control={form.control} name="body" render={({ field }) => (
-                <FormItem>
-                  <FormControl>
-                    {editorMode === "rich" ? (
-                      <RichTextEditor
-                        value={field.value}
-                        onChange={field.onChange}
-                        placeholder="Write your email body here... Use {{firstName}}, {{company}}, etc. for personalization."
-                        data-testid="input-template-body"
-                      />
-                    ) : editorMode === "source" ? (
-                      <Textarea
-                        placeholder={"<!DOCTYPE html>\n<html>\n  <body>\n    Hi {{firstName}}, ...\n  </body>\n</html>"}
-                        rows={12}
-                        className="font-mono text-xs"
-                        data-testid="input-template-body"
-                        {...field}
-                      />
-                    ) : (
-                      <Textarea
-                        placeholder={"Hi {{firstName}},\n\nI noticed {{company}} recently...\n\nBest,\n{{senderName}}"}
-                        rows={8}
-                        data-testid="input-template-body"
-                        {...field}
-                      />
-                    )}
-                  </FormControl>
-                  {editorMode === "source" && (
-                    <p className="text-xs text-muted-foreground">Paste raw HTML — it will be sent exactly as written.</p>
-                  )}
-                  <FormMessage />
-                </FormItem>
-              )} />
-
-              {editorMode !== "text" && (
-                <div className="pt-2">
+                <div className="min-w-0 min-h-0">
                   <EmailPreview
                     body={form.watch("body") || ""}
-                    bodyType="html"
+                    bodyType={editorMode === "text" ? "text" : "html"}
                     subject={form.watch("subject") || undefined}
                     previewText={form.watch("previewText") || undefined}
+                    className="h-full"
                   />
                 </div>
-              )}
-              {editorMode === "text" && (form.watch("body") || "").trim().length > 0 && (
-                <div className="pt-2">
-                  <EmailPreview
-                    body={form.watch("body") || ""}
-                    bodyType="text"
-                    subject={form.watch("subject") || undefined}
-                    previewText={form.watch("previewText") || undefined}
-                  />
-                </div>
-              )}
-
               </div>
               <DialogFooter className="shrink-0 pt-4 border-t border-border mt-2">
                 <Button type="button" variant="outline" onClick={closeDialog} data-testid="button-cancel-template">Cancel</Button>

@@ -1,14 +1,14 @@
-import { pgTable, serial, text, integer, timestamp, index } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const unsubscribesTable = pgTable("unsubscribes", {
-  id: serial("id").primaryKey(),
+export const unsubscribesTable = sqliteTable("unsubscribes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   leadId: integer("lead_id").notNull(),
   campaignId: integer("campaign_id"),
   token: text("token").notNull().unique(),
-  unsubscribedAt: timestamp("unsubscribed_at"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  unsubscribedAt: integer("unsubscribed_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 }, (t) => ({
   tokenIdx: index("unsub_token_idx").on(t.token),
   leadIdx: index("unsub_lead_idx").on(t.leadId),

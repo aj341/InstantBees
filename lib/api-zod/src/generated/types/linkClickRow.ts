@@ -12,4 +12,17 @@ export interface LinkClickRow {
   uniqueClicks: number;
   /** @nullable */
   lastClickedAt: Date | null;
+  clicks?: LinkClickDetail[];
+}
+
+export interface LinkClickDetail {
+  leadId: number;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  company: string | null;
+  /** @nullable */
+  clickedAt: Date | null;
 }

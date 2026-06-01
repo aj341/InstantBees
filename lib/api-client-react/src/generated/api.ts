@@ -30,6 +30,8 @@ import type {
   CampaignAnalytics,
   CampaignInput,
   CampaignLeadsInput,
+  CampaignOpenRow,
+  CampaignReplyRow,
   CampaignStatsOverview,
   CampaignUpdate,
   CreateTemplateInput,
@@ -1167,6 +1169,92 @@ export function useGetCampaignLinkClicks<TData = Awaited<ReturnType<typeof getCa
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getGetCampaignOpensUrl = (id: number,) => {
+  return `/api/campaigns/${id}/opens`
+}
+
+/**
+ * @summary Opened lead breakdown for a campaign
+ */
+export const getCampaignOpens = async (id: number, options?: RequestInit): Promise<CampaignOpenRow[]> => {
+  return customFetch<CampaignOpenRow[]>(getGetCampaignOpensUrl(id),
+  {
+    ...options,
+    method: 'GET'
+  }
+);}
+
+export const getGetCampaignOpensQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/opens`
+    ] as const;
+    }
+
+export const getGetCampaignOpensQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignOpens>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignOpens>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+const {query: queryOptions, request: requestOptions} = options ?? {};
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignOpensQueryKey(id);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignOpens>>> = ({ signal }) => getCampaignOpens(id, { signal, ...requestOptions });
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignOpens>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignOpensQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignOpens>>>
+export type GetCampaignOpensQueryError = ErrorType<unknown>
+
+/**
+ * @summary Opened lead breakdown for a campaign
+ */
+export function useGetCampaignOpens<TData = Awaited<ReturnType<typeof getCampaignOpens>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignOpens>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCampaignOpensQueryOptions(id,options)
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getGetCampaignRepliesUrl = (id: number,) => {
+  return `/api/campaigns/${id}/replies`
+}
+
+/**
+ * @summary Replied lead breakdown for a campaign
+ */
+export const getCampaignReplies = async (id: number, options?: RequestInit): Promise<CampaignReplyRow[]> => {
+  return customFetch<CampaignReplyRow[]>(getGetCampaignRepliesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+  }
+);}
+
+export const getGetCampaignRepliesQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/replies`
+    ] as const;
+    }
+
+export const getGetCampaignRepliesQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignReplies>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignReplies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+const {query: queryOptions, request: requestOptions} = options ?? {};
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignRepliesQueryKey(id);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignReplies>>> = ({ signal }) => getCampaignReplies(id, { signal, ...requestOptions });
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignReplies>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignRepliesQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignReplies>>>
+export type GetCampaignRepliesQueryError = ErrorType<unknown>
+
+/**
+ * @summary Replied lead breakdown for a campaign
+ */
+export function useGetCampaignReplies<TData = Awaited<ReturnType<typeof getCampaignReplies>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignReplies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCampaignRepliesQueryOptions(id,options)
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
@@ -3393,8 +3481,6 @@ export function useGetDailyAnalytics<TData = Awaited<ReturnType<typeof getDailyA
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
-
-
 
 
 

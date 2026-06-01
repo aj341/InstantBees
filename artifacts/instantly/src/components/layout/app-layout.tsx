@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Megaphone, Users, Mail, Inbox, BarChart, FileText, LogOut } from "lucide-react";
+import { LayoutDashboard, Megaphone, Users, Mail, Inbox, BarChart, FileText, LogOut, Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth, useLogout } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: "/accounts", label: "Accounts", icon: Mail },
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/analytics", label: "Analytics", icon: BarChart },
+  { href: "/growth", label: "Growth", icon: Rocket },
   { href: "/templates", label: "Templates", icon: FileText },
 ];
 

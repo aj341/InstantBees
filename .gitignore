@@ -31,6 +31,11 @@ node_modules
 /.sass-cache
 /connect.lock
 /coverage
+/data/*.sqlite
+/data/*.sqlite-*
+.env
+.env.*
+!.env.example
 /libpeerconnection.log
 npm-debug.log
 yarn-error.log

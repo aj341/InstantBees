@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   useGetCampaign,
   useGetCampaignAnalytics,
   useGetCampaignLinkClicks,
+  useGetCampaignOpens,
+  useGetCampaignReplies,
   getGetCampaignLinkClicksQueryKey,
+  getGetCampaignOpensQueryKey,
+  getGetCampaignRepliesQueryKey,
   useListSequences,
   useListCampaignLeads,
   useListLeads,
@@ -19,6 +23,7 @@ import {
   useUpdateCampaign,
   useListTemplates,
   useListAccounts,
+  useListLabels,
   useSendTestStep,
   getGetCampaignQueryKey,
   getGetCampaignAnalyticsQueryKey,
@@ -28,6 +33,7 @@ import {
   getGetCampaignStatsQueryKey,
   getListTemplatesQueryKey,
   getListAccountsQueryKey,
+  getListLabelsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -54,7 +60,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type, FileText, Send, Braces, MousePointerClick, Clock } from "lucide-react";
+import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type, FileText, Send, Braces, MousePointerClick, Clock, AlertTriangle } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/email-editor/rich-text-editor";
@@ -77,6 +83,79 @@ const STATUS_COLORS: Record<string, string> = {
   completed: "secondary",
 };
 
+type SequenceProgress = {
+  status: "not_queued" | "waiting" | "scheduled" | "sending" | "completed" | "replied" | "bounced" | "failed";
+  currentStepNumber: number;
+  currentStepSubject?: string | null;
+  nextStepNumber?: number | null;
+  nextStepSubject?: string | null;
+  nextScheduledAt?: string | null;
+  totalSteps: number;
+  sentSteps: number;
+  queuedSteps: number;
+  opened: boolean;
+  clicked: boolean;
+  replied: boolean;
+  bounced: boolean;
+  failed: boolean;
+  lastSentAt?: string | null;
+  lastOpenedAt?: string | null;
+  lastClickedAt?: string | null;
+  lastRepliedAt?: string | null;
+  lastEventAt?: string | null;
+};
+
+type CampaignLeadWithProgress = {
+  id: number;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  company?: string | null;
+  status?: string;
+  sequenceProgress?: SequenceProgress | null;
+};
+
+const SEQUENCE_STATUS_LABELS: Record<SequenceProgress["status"], string> = {
+  not_queued: "Not queued",
+  waiting: "Waiting",
+  scheduled: "Scheduled",
+  sending: "Sending",
+  completed: "Completed",
+  replied: "Replied",
+  bounced: "Bounced",
+  failed: "Failed",
+};
+
+const SEQUENCE_STATUS_VARIANTS: Record<SequenceProgress["status"], "default" | "secondary" | "destructive" | "outline"> = {
+  not_queued: "outline",
+  waiting: "secondary",
+  scheduled: "secondary",
+  sending: "default",
+  completed: "outline",
+  replied: "default",
+  bounced: "destructive",
+  failed: "destructive",
+};
+
+function sequenceProgressLabel(progress?: SequenceProgress | null): string {
+  if (!progress) return "Not queued";
+  if (progress.status === "not_queued") return "Not queued";
+  if (progress.status === "completed" || progress.status === "replied" || progress.status === "bounced") {
+    return `${progress.sentSteps}/${progress.totalSteps || progress.sentSteps}`;
+  }
+  if (progress.nextStepNumber) return `Next: step ${progress.nextStepNumber}/${progress.totalSteps || progress.nextStepNumber}`;
+  if (progress.currentStepNumber) return `Step ${progress.currentStepNumber}/${progress.totalSteps || progress.currentStepNumber}`;
+  return `${progress.sentSteps}/${progress.totalSteps || progress.queuedSteps || 0}`;
+}
+
+function toDateTimeLocal(value?: string | Date | null): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
 export default function CampaignDetail() {
   const params = useParams<{ id: string }>();
   const id = parseInt(params.id, 10);
@@ -87,15 +166,21 @@ export default function CampaignDetail() {
   const [editStep, setEditStep] = useState<{ id: number; subject: string; previewText?: string | null; body: string; bodyType: "text" | "html"; delayDays: number } | null>(null);
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
+  const [selectedAddLabelIds, setSelectedAddLabelIds] = useState<number[]>([]);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<"text" | "rich" | "source">("text");
   const [testDialog, setTestDialog] = useState<{ stepId: number; subject: string } | null>(null);
   const [testAccountId, setTestAccountId] = useState<number | null>(null);
   const [testToEmail, setTestToEmail] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [scheduledStartInput, setScheduledStartInput] = useState("");
+  const [batchSizeInput, setBatchSizeInput] = useState("25");
+  const [batchIntervalInput, setBatchIntervalInput] = useState("60");
+  const [activeTab, setActiveTab] = useState("overview");
 
   const { data: templates } = useListTemplates({ query: { queryKey: getListTemplatesQueryKey() } });
   const { data: accounts } = useListAccounts({ query: { queryKey: getListAccountsQueryKey() } });
+  const { data: labels } = useListLabels({ query: { queryKey: getListLabelsQueryKey() } });
 
   const sendTest = useSendTestStep({
     mutation: {
@@ -139,9 +224,21 @@ export default function CampaignDetail() {
   const { data: campaign, isLoading } = useGetCampaign(id, { query: { enabled: !!id, queryKey: getGetCampaignQueryKey(id) } });
   const { data: analytics } = useGetCampaignAnalytics(id, { query: { enabled: !!id, queryKey: getGetCampaignAnalyticsQueryKey(id) } });
   const { data: linkClicks } = useGetCampaignLinkClicks(id, { query: { enabled: !!id, queryKey: getGetCampaignLinkClicksQueryKey(id) } });
+  const { data: opens } = useGetCampaignOpens(id, { query: { enabled: !!id, queryKey: getGetCampaignOpensQueryKey(id) } });
+  const { data: replies } = useGetCampaignReplies(id, { query: { enabled: !!id, queryKey: getGetCampaignRepliesQueryKey(id) } });
   const { data: steps } = useListSequences(id, { query: { enabled: !!id, queryKey: getListSequencesQueryKey(id) } });
   const { data: campaignLeads } = useListCampaignLeads(id, { query: { enabled: !!id, queryKey: getListCampaignLeadsQueryKey(id) } });
   const { data: allLeads } = useListLeads();
+
+  useEffect(() => {
+    setScheduledStartInput(toDateTimeLocal(campaign?.scheduledStartAt ?? null));
+  }, [campaign?.scheduledStartAt]);
+
+  useEffect(() => {
+    if (!campaign) return;
+    setBatchSizeInput(String(campaign.batchSize ?? 25));
+    setBatchIntervalInput(String(campaign.batchIntervalMinutes ?? 60));
+  }, [campaign]);
 
   const launch = useLaunchCampaign({
     mutation: {
@@ -172,12 +269,29 @@ export default function CampaignDetail() {
         queryClient.invalidateQueries({ queryKey: getGetCampaignQueryKey(id) });
         queryClient.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       },
-      onError: () => toast({ title: "Failed to update tracking settings", variant: "destructive" }),
+      onError: () => toast({ title: "Failed to update campaign settings", variant: "destructive" }),
     },
   });
 
   function updateTracking(data: { trackOpens?: boolean; trackClicks?: boolean; includeUnsubscribe?: boolean }) {
     updateCampaign.mutate({ id, data });
+  }
+
+  function saveScheduledStart() {
+    updateCampaign.mutate({
+      id,
+      data: { scheduledStartAt: scheduledStartInput ? new Date(scheduledStartInput).toISOString() : null },
+    });
+  }
+
+  function saveBatchSettings() {
+    updateCampaign.mutate({
+      id,
+      data: {
+        batchSize: Number(batchSizeInput) || 25,
+        batchIntervalMinutes: Number(batchIntervalInput) || 60,
+      },
+    });
   }
 
   const remove = useDeleteCampaign({
@@ -234,6 +348,7 @@ export default function CampaignDetail() {
         queryClient.invalidateQueries({ queryKey: getGetCampaignQueryKey(id) });
         setAddLeadOpen(false);
         setSelectedLeadIds([]);
+        setSelectedAddLabelIds([]);
       },
       onError: () => toast({ title: "Failed to add leads", variant: "destructive" }),
     },
@@ -279,7 +394,25 @@ export default function CampaignDetail() {
   }
 
   const campaignLeadIds = new Set(campaignLeads?.map(l => l.id));
+  const campaignLeadsWithProgress = (campaignLeads ?? []) as CampaignLeadWithProgress[];
   const availableLeads = allLeads?.filter(l => !campaignLeadIds.has(l.id)) ?? [];
+  const totalLinkClicks = (linkClicks ?? []).reduce((sum, row) => sum + row.totalClicks, 0);
+  const uniqueClickedLeadIds = new Set((linkClicks ?? []).flatMap((row) => (row.clicks ?? []).map((click) => click.leadId)));
+  const uniqueClickedLeads = uniqueClickedLeadIds.size || analytics?.uniqueClickedLeads || 0;
+  const availableLeadsByLabel = selectedAddLabelIds.length === 0
+    ? availableLeads
+    : availableLeads.filter((lead) => {
+        const leadLabelIds = new Set((lead.labels ?? []).map((label) => label.id));
+        return selectedAddLabelIds.every((labelId) => leadLabelIds.has(labelId));
+      });
+
+  function toggleLeadSelection(leadId: number, checked: boolean) {
+    setSelectedLeadIds(prev => checked ? Array.from(new Set([...prev, leadId])) : prev.filter(x => x !== leadId));
+  }
+
+  function selectVisibleAvailableLeads() {
+    setSelectedLeadIds(prev => Array.from(new Set([...prev, ...availableLeadsByLabel.map((lead) => lead.id)])));
+  }
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading campaign...</div>;
   if (!campaign) return <div className="p-8 text-muted-foreground">Campaign not found.</div>;
@@ -351,25 +484,53 @@ export default function CampaignDetail() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Tabs defaultValue="overview">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="sequence" data-testid="tab-sequence">Sequence ({steps?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="leads" data-testid="tab-leads">Leads ({campaign.leadsCount})</TabsTrigger>
+          <TabsTrigger value="opens" data-testid="tab-opens">Opens ({opens?.length ?? analytics?.opened ?? 0})</TabsTrigger>
+          <TabsTrigger value="replies" data-testid="tab-replies">Replies ({replies?.length ?? analytics?.replied ?? 0})</TabsTrigger>
           <TabsTrigger value="links" data-testid="tab-links">Links</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4 mt-4">
-          <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
+          <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
             {[
               { label: "Sent", value: campaign.sentCount, icon: Mail },
-              { label: "Open Rate", value: `${analytics?.openRate ?? 0}%`, icon: TrendingUp },
-              { label: "Click Rate", value: `${analytics?.clickRate ?? 0}%`, icon: MousePointerClick, sub: `${campaign.clickCount ?? 0} clicks` },
-              { label: "Reply Rate", value: `${analytics?.replyRate ?? 0}%`, icon: MessageSquare },
+              { label: "Open Rate", value: `${analytics?.openRate ?? 0}%`, icon: TrendingUp, tab: "opens" },
+              {
+                label: "Click Rate",
+                value: `${analytics?.clickRate ?? 0}%`,
+                icon: MousePointerClick,
+                sub: `${totalLinkClicks || analytics?.clicked || campaign.clickCount || 0} total clicks` +
+                  (uniqueClickedLeads > 0 ? ` • ${uniqueClickedLeads} clicked ${uniqueClickedLeads === 1 ? "lead" : "leads"}` : ""),
+              },
+              { label: "Reply Rate", value: `${analytics?.replyRate ?? 0}%`, icon: MessageSquare, tab: "replies" },
+              {
+                label: "Bounce Rate",
+                value: `${analytics?.bounceRate ?? 0}%`,
+                icon: AlertTriangle,
+                sub: `${analytics?.bounced ?? campaign.bounceCount ?? 0} bounced`,
+              },
               { label: "Leads", value: campaign.leadsCount, icon: Users },
             ].map(stat => (
-              <Card key={stat.label}>
+              <Card
+                key={stat.label}
+                role={"tab" in stat ? "button" : undefined}
+                tabIndex={"tab" in stat ? 0 : undefined}
+                onClick={() => { if ("tab" in stat && stat.tab) setActiveTab(stat.tab); }}
+                onKeyDown={(event) => {
+                  if (!("tab" in stat) || !stat.tab) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setActiveTab(stat.tab);
+                  }
+                }}
+                className={"tab" in stat ? "cursor-pointer transition-colors hover:border-primary/60 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" : undefined}
+                data-testid={"tab" in stat ? `card-jump-${stat.tab}` : undefined}
+              >
                 <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                   <CardTitle className="text-sm font-medium text-muted-foreground">{stat.label}</CardTitle>
                   <stat.icon className="h-4 w-4 text-muted-foreground" />
@@ -385,6 +546,24 @@ export default function CampaignDetail() {
           </div>
 
           <Card>
+            <CardHeader><CardTitle>Deliverability Snapshot</CardTitle></CardHeader>
+            <CardContent className="grid gap-3 text-sm sm:grid-cols-3">
+              <div>
+                <div className="text-muted-foreground">Bounce Status</div>
+                <div className="font-medium">{analytics?.bounced ?? campaign.bounceCount ?? 0} bounces recorded</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Sending Pool</div>
+                <div className="font-medium">{accounts?.filter((account) => account.status === "connected" || account.status === "warming").length ?? 0} sendable mailboxes</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Full Health Table</div>
+                <Link href="/growth" className="font-medium text-primary hover:underline">Open Growth deliverability</Link>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
             <CardHeader><CardTitle>Campaign Settings</CardTitle></CardHeader>
             <CardContent>
               <dl className="grid grid-cols-2 gap-4 text-sm">
@@ -393,8 +572,70 @@ export default function CampaignDetail() {
                   <dd className="font-medium">{campaign.dailyLimit ?? "No limit"}</dd>
                 </div>
                 <div>
+                  <dt className="text-muted-foreground">Batch Sending</dt>
+                  <dd className="font-medium">{campaign.batchSize ?? 25} every {campaign.batchIntervalMinutes ?? 60} min</dd>
+                </div>
+                <div>
                   <dt className="text-muted-foreground">Reply-To</dt>
                   <dd className="font-medium">{campaign.replyTo ?? "—"}</dd>
+                </div>
+                <div className="col-span-2 space-y-2 rounded-md border border-border bg-muted/20 p-3">
+                  <dt className="text-muted-foreground">Batch Sending</dt>
+                  <dd className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                    <Input
+                      type="number"
+                      min={1}
+                      value={batchSizeInput}
+                      onChange={(e) => setBatchSizeInput(e.target.value)}
+                      data-testid="input-campaign-batch-size"
+                    />
+                    <Input
+                      type="number"
+                      min={1}
+                      value={batchIntervalInput}
+                      onChange={(e) => setBatchIntervalInput(e.target.value)}
+                      data-testid="input-campaign-batch-interval"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={saveBatchSettings}
+                      disabled={updateCampaign.isPending}
+                      data-testid="button-save-batch-settings"
+                    >
+                      Save batch
+                    </Button>
+                  </dd>
+                  <p className="text-xs text-muted-foreground">
+                    First box is leads per batch. Second box is minutes between batches. Pending emails are rescheduled when you save.
+                  </p>
+                </div>
+                <div className="col-span-2 space-y-2 rounded-md border border-border bg-muted/20 p-3">
+                  <dt className="flex items-center gap-2 text-muted-foreground">
+                    <Clock className="h-4 w-4" /> Schedule Start Time
+                  </dt>
+                  <dd className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      type="datetime-local"
+                      value={scheduledStartInput}
+                      onChange={(e) => setScheduledStartInput(e.target.value)}
+                      data-testid="input-campaign-scheduled-start"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={saveScheduledStart}
+                      disabled={updateCampaign.isPending}
+                      data-testid="button-save-scheduled-start"
+                    >
+                      Save start time
+                    </Button>
+                  </dd>
+                  <p className="text-xs text-muted-foreground">
+                    {campaign.status === "active"
+                      ? "If this campaign is scheduled for the future, pending emails will move to the new start time."
+                      : "Leave blank to start immediately when the campaign is launched."}
+                  </p>
                 </div>
                 <div className="flex items-center justify-between">
                   <dt className="text-muted-foreground">Track Opens</dt>
@@ -521,33 +762,158 @@ export default function CampaignDetail() {
                   <TableHead>Email</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Company</TableHead>
+                  <TableHead>Sequence</TableHead>
+                  <TableHead>Next Send</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {campaignLeads?.length === 0 ? (
+                {campaignLeadsWithProgress.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-12 text-center text-muted-foreground text-sm">
+                    <TableCell colSpan={7} className="py-12 text-center text-muted-foreground text-sm">
                       No leads in this campaign yet.
                     </TableCell>
                   </TableRow>
-                ) : campaignLeads?.map(lead => (
-                  <TableRow key={lead.id} data-testid={`row-campaign-lead-${lead.id}`}>
-                    <TableCell className="font-medium">{lead.email}</TableCell>
-                    <TableCell>{[lead.firstName, lead.lastName].filter(Boolean).join(" ") || "—"}</TableCell>
-                    <TableCell>{lead.company || "—"}</TableCell>
-                    <TableCell><Badge variant="secondary">{lead.status}</Badge></TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => removeLead.mutate({ id, leadId: lead.id })} data-testid={`button-remove-lead-${lead.id}`}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                ) : campaignLeadsWithProgress.map(lead => {
+                  const progress = lead.sequenceProgress;
+                  const progressStatus = progress?.status ?? "not_queued";
+                  return (
+                    <TableRow key={lead.id} data-testid={`row-campaign-lead-${lead.id}`}>
+                      <TableCell className="font-medium">{lead.email}</TableCell>
+                      <TableCell>{[lead.firstName, lead.lastName].filter(Boolean).join(" ") || "-"}</TableCell>
+                      <TableCell>{lead.company || "-"}</TableCell>
+                      <TableCell className="min-w-56">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant={SEQUENCE_STATUS_VARIANTS[progressStatus]}>
+                              {SEQUENCE_STATUS_LABELS[progressStatus]}
+                            </Badge>
+                            <span className="text-sm text-muted-foreground">{sequenceProgressLabel(progress)}</span>
+                          </div>
+                          {(progress?.nextStepSubject || progress?.currentStepSubject) && (
+                            <p className="text-xs text-muted-foreground truncate max-w-72">
+                              {progress.nextStepSubject ? `Next: ${progress.nextStepSubject}` : `Current: ${progress.currentStepSubject}`}
+                            </p>
+                          )}
+                          {progress && (progress.opened || progress.clicked || progress.replied) && (
+                            <p className="text-xs text-muted-foreground">
+                              {[
+                                progress.opened ? "opened" : null,
+                                progress.clicked ? "clicked" : null,
+                                progress.replied ? "replied" : null,
+                              ].filter(Boolean).join(" / ")}
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {progress?.nextScheduledAt ? (
+                          <div className="flex items-center gap-2 whitespace-nowrap">
+                            <Clock className="h-3.5 w-3.5" />
+                            {new Date(progress.nextScheduledAt).toLocaleString()}
+                          </div>
+                        ) : progress?.lastSentAt ? (
+                          <span>Last sent {new Date(progress.lastSentAt).toLocaleString()}</span>
+                        ) : "-"}
+                      </TableCell>
+                      <TableCell><Badge variant="secondary">{lead.status}</Badge></TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" onClick={() => removeLead.mutate({ id, leadId: lead.id })} data-testid={`button-remove-lead-${lead.id}`}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
+        </TabsContent>
+
+        {/* Opens Tab */}
+        <TabsContent value="opens" className="mt-4 space-y-4">
+          {!opens || opens.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+              <TrendingUp className="h-8 w-8 opacity-30" />
+              <p className="text-sm">No opens recorded yet for this campaign.</p>
+              <p className="text-xs">Pixel opens, clicks, and replies all count as confirmed opens.</p>
+            </div>
+          ) : (
+            <div className="rounded-md border border-border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead className="text-right">Opened</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {opens.map((open, i) => (
+                    <TableRow key={`${open.leadId}-${open.openedAt}-${i}`} data-testid={`row-open-${i}`}>
+                      <TableCell className="font-medium">{open.email ?? `Lead #${open.leadId}`}</TableCell>
+                      <TableCell>{open.name ?? "—"}</TableCell>
+                      <TableCell>{open.company ?? "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="capitalize">{open.source}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-sm text-muted-foreground">
+                        {new Date(open.openedAt).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Replies Tab */}
+        <TabsContent value="replies" className="mt-4 space-y-4">
+          {!replies || replies.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+              <MessageSquare className="h-8 w-8 opacity-30" />
+              <p className="text-sm">No replies recorded yet for this campaign.</p>
+              <p className="text-xs">Once inbox polling matches a reply to a sent email, it'll show up here.</p>
+            </div>
+          ) : (
+            <div className="rounded-md border border-border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Reply</TableHead>
+                    <TableHead className="text-right">Replied</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {replies.map((reply, i) => (
+                    <TableRow key={`${reply.leadId}-${reply.repliedAt}-${i}`} data-testid={`row-reply-${i}`}>
+                      <TableCell className="font-medium">{reply.email ?? `Lead #${reply.leadId}`}</TableCell>
+                      <TableCell>{reply.name ?? "—"}</TableCell>
+                      <TableCell>{reply.company ?? "—"}</TableCell>
+                      <TableCell className="max-w-md">
+                        <p className="font-medium truncate">{reply.subject ?? "Reply"}</p>
+                        {reply.body && (
+                          <p className="text-xs text-muted-foreground line-clamp-2">
+                            {reply.body.replace(/\s+/g, " ").trim()}
+                          </p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right text-sm text-muted-foreground">
+                        {reply.repliedAt ? new Date(reply.repliedAt).toLocaleString() : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </TabsContent>
 
         {/* Links Tab */}
@@ -570,26 +936,59 @@ export default function CampaignDetail() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {linkClicks.map((row, i) => (
-                    <TableRow key={`${row.url}-${i}`} data-testid={`row-link-click-${i}`}>
-                      <TableCell className="max-w-md">
-                        <a
-                          href={row.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-cyan-400 hover:underline break-all"
-                          data-testid={`link-url-${i}`}
-                        >
-                          {row.url}
-                        </a>
-                      </TableCell>
-                      <TableCell className="text-right font-medium" data-testid={`text-total-clicks-${i}`}>{row.totalClicks}</TableCell>
-                      <TableCell className="text-right" data-testid={`text-unique-clicks-${i}`}>{row.uniqueClicks}</TableCell>
-                      <TableCell className="text-right text-sm text-muted-foreground">
-                        {row.lastClickedAt ? new Date(row.lastClickedAt).toLocaleString() : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {linkClicks.map((row, i) => {
+                    const clicks = row.clicks ?? [];
+                    return (
+                    <Fragment key={`${row.url}-${i}`}>
+                      <TableRow key={`${row.url}-${i}`} data-testid={`row-link-click-${i}`}>
+                        <TableCell className="max-w-md">
+                          <a
+                            href={row.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-cyan-400 hover:underline break-all"
+                            data-testid={`link-url-${i}`}
+                          >
+                            {row.url}
+                          </a>
+                        </TableCell>
+                        <TableCell className="text-right font-medium" data-testid={`text-total-clicks-${i}`}>{row.totalClicks}</TableCell>
+                        <TableCell className="text-right" data-testid={`text-unique-clicks-${i}`}>{row.uniqueClicks}</TableCell>
+                        <TableCell className="text-right text-sm text-muted-foreground">
+                          {row.lastClickedAt ? new Date(row.lastClickedAt).toLocaleString() : "—"}
+                        </TableCell>
+                      </TableRow>
+                      {clicks.length > 0 && (
+                        <TableRow key={`${row.url}-${i}-details`}>
+                          <TableCell colSpan={4} className="bg-muted/20 px-4 py-3">
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-muted-foreground">Clicked by</p>
+                              <div className="space-y-1.5">
+                                {clicks.map((click, clickIndex) => (
+                                  <div
+                                    key={`${row.url}-${click.leadId}-${click.clickedAt}-${clickIndex}`}
+                                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-background/60 px-3 py-2 text-sm"
+                                    data-testid={`row-link-click-lead-${i}-${clickIndex}`}
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="font-medium">{click.email ?? `Lead #${click.leadId}`}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {[click.name, click.company].filter(Boolean).join(" • ") || "No lead details"}
+                                      </p>
+                                    </div>
+                                    <span className="text-xs text-muted-foreground">
+                                      {click.clickedAt ? new Date(click.clickedAt).toLocaleString() : "—"}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -640,7 +1039,7 @@ export default function CampaignDetail() {
 
       {/* Sequence step dialog */}
       <Dialog open={seqDialogOpen} onOpenChange={v => { setSeqDialogOpen(v); if (!v) { setEditStep(null); seqForm.reset(); } }}>
-        <DialogContent className="max-w-2xl flex flex-col max-h-[90vh]">
+        <DialogContent className="w-[min(1400px,95vw)] max-w-none flex flex-col max-h-[92vh]">
           <DialogHeader className="shrink-0">
             <div className="flex items-center justify-between">
               <DialogTitle>{editStep ? "Edit Step" : "Add Sequence Step"}</DialogTitle>
@@ -658,22 +1057,33 @@ export default function CampaignDetail() {
           </DialogHeader>
           <Form {...seqForm}>
             <form onSubmit={seqForm.handleSubmit(onSeqSubmit)} className="flex flex-col flex-1 min-h-0">
-              <div className="overflow-y-auto flex-1 space-y-4 pr-1">
-              <FormField control={seqForm.control} name="subject" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Subject</FormLabel>
-                  <FormControl><Input placeholder="Re: Quick question about {{company}}" data-testid="input-step-subject" {...field} value={field.value ?? ""} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <div className="grid flex-1 min-h-0 gap-4 pr-1 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.95fr)]">
+                <div className="flex min-w-0 min-h-0 flex-col gap-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField control={seqForm.control} name="subject" render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <FormLabel>Subject</FormLabel>
+                    <FormControl><Input placeholder="Re: Quick question about {{company}}" data-testid="input-step-subject" {...field} value={field.value ?? ""} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
 
-              <FormField control={seqForm.control} name="previewText" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Preview Text <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
-                  <FormControl><Input placeholder="Short snippet shown next to the subject in the inbox preview" data-testid="input-step-preview-text" {...field} value={field.value ?? ""} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+                <FormField control={seqForm.control} name="previewText" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Preview Text <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                    <FormControl><Input placeholder="Short snippet shown next to the subject in the inbox preview" data-testid="input-step-preview-text" {...field} value={field.value ?? ""} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={seqForm.control} name="delayDays" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Delay (days after previous step)</FormLabel>
+                    <FormControl><Input type="number" min={0} data-testid="input-step-delay" {...field} /></FormControl>
+                    <FormDescription>0 = same day as previous step or campaign launch</FormDescription>
+                  </FormItem>
+                )} />
+              </div>
 
               {/* Body type toggle (not bound to a form field — plain markup to avoid useFormField) */}
               <div className="space-y-2">
@@ -708,58 +1118,50 @@ export default function CampaignDetail() {
                 </div>
               </div>
 
-              <FormField control={seqForm.control} name="body" render={({ field }) => (
-                <FormItem>
-                  <FormControl>
-                    {editorMode === "rich" ? (
-                      <RichTextEditor
-                        value={field.value}
-                        onChange={field.onChange}
-                        placeholder="Write your HTML email here..."
-                        data-testid="input-step-body"
-                      />
-                    ) : editorMode === "source" ? (
-                      <Textarea
-                        placeholder={"<!DOCTYPE html>\n<html>\n  <body>\n    Hi {{firstName}}, ...\n  </body>\n</html>"}
-                        rows={12}
-                        className="font-mono text-xs"
-                        data-testid="input-step-body"
-                        {...field}
-                      />
-                    ) : (
-                      <Textarea
-                        placeholder={"Hi {{firstName}},\n\n..."}
-                        rows={7}
-                        data-testid="input-step-body"
-                        {...field}
-                      />
-                    )}
-                  </FormControl>
-                  {editorMode === "source" && (
-                    <FormDescription>Paste raw HTML. It will be sent exactly as written. Use {"{{firstName}}"}, {"{{company}}"}, etc. for personalization.</FormDescription>
-                  )}
-                  <FormMessage />
-                </FormItem>
-              )} />
-
-              {(seqForm.watch("body") || "").trim().length > 0 && (
-                <div className="pt-2">
+              <div className="flex-1 min-h-0 rounded-md border border-border bg-card p-3">
+                  <FormField control={seqForm.control} name="body" render={({ field }) => (
+                    <FormItem className="flex h-full min-h-0 flex-col">
+                      <FormControl className="flex-1 min-h-0">
+                        {editorMode === "rich" ? (
+                          <RichTextEditor
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="Write your HTML email here..."
+                            data-testid="input-step-body"
+                          />
+                        ) : editorMode === "source" ? (
+                          <Textarea
+                            placeholder={"<!DOCTYPE html>\n<html>\n  <body>\n    Hi {{firstName}}, ...\n  </body>\n</html>"}
+                            className="h-full min-h-[360px] font-mono text-xs leading-relaxed resize-none"
+                            data-testid="input-step-body"
+                            {...field}
+                          />
+                        ) : (
+                          <Textarea
+                            placeholder={"Hi {{firstName}},\n\n..."}
+                            className="h-full min-h-[360px] resize-none"
+                            data-testid="input-step-body"
+                            {...field}
+                          />
+                        )}
+                      </FormControl>
+                      {editorMode === "source" && (
+                        <FormDescription>Paste raw HTML. It will be sent exactly as written. Use {"{{firstName}}"}, {"{{company}}"}, etc. for personalization.</FormDescription>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+              </div>
+                </div>
+                <div className="min-w-0 min-h-0">
                   <EmailPreview
                     body={seqForm.watch("body") || ""}
                     bodyType={editorMode === "text" ? "text" : "html"}
                     subject={seqForm.watch("subject") || undefined}
                     previewText={seqForm.watch("previewText") || undefined}
+                    className="h-full"
                   />
                 </div>
-              )}
-
-              <FormField control={seqForm.control} name="delayDays" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Delay (days after previous step)</FormLabel>
-                  <FormControl><Input type="number" min={0} data-testid="input-step-delay" {...field} /></FormControl>
-                  <FormDescription>0 = same day as previous step or campaign launch</FormDescription>
-                </FormItem>
-              )} />
               </div>
               <DialogFooter className="shrink-0 pt-4 border-t border-border mt-2">
                 <Button type="button" variant="outline" onClick={() => setSeqDialogOpen(false)} data-testid="button-cancel-step">Cancel</Button>
@@ -824,14 +1226,66 @@ export default function CampaignDetail() {
 
       {/* Add leads dialog */}
       <Dialog open={addLeadOpen} onOpenChange={setAddLeadOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add Leads to Campaign</DialogTitle>
           </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">Add by label</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={selectVisibleAvailableLeads}
+                  disabled={availableLeadsByLabel.length === 0}
+                  data-testid="button-select-visible-leads"
+                >
+                  Select {availableLeadsByLabel.length}
+                </Button>
+              </div>
+              {!labels?.length ? (
+                <p className="text-xs text-muted-foreground">No labels yet. Create labels in Leads, then use them here to add a whole list/segment.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {labels.map((label) => {
+                    const selected = selectedAddLabelIds.includes(label.id);
+                    const color = label.color || "#06b6d4";
+                    return (
+                      <button
+                        key={label.id}
+                        type="button"
+                        onClick={() => setSelectedAddLabelIds(selected
+                          ? selectedAddLabelIds.filter((labelId) => labelId !== label.id)
+                          : [...selectedAddLabelIds, label.id])}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border transition-opacity"
+                        style={{
+                          backgroundColor: selected ? `${color}33` : "transparent",
+                          borderColor: `${color}66`,
+                          color,
+                          opacity: selected ? 1 : 0.65,
+                        }}
+                        data-testid={`campaign-filter-label-${label.id}`}
+                      >
+                        {label.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {selectedAddLabelIds.length > 0
+                  ? `${availableLeadsByLabel.length} available lead${availableLeadsByLabel.length === 1 ? "" : "s"} match the selected label${selectedAddLabelIds.length === 1 ? "" : "s"}.`
+                  : "Pick one or more labels to filter, or select individual leads below."}
+              </p>
+            </div>
           <div className="max-h-80 overflow-y-auto space-y-2">
             {availableLeads.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">All leads are already in this campaign</p>
-            ) : availableLeads.map(lead => (
+            ) : availableLeadsByLabel.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No available leads match those labels.</p>
+            ) : availableLeadsByLabel.map(lead => (
               <label
                 key={lead.id}
                 className="flex items-center gap-3 p-2 rounded hover:bg-accent cursor-pointer"
@@ -840,22 +1294,24 @@ export default function CampaignDetail() {
                 <input
                   type="checkbox"
                   checked={selectedLeadIds.includes(lead.id)}
-                  onChange={e => {
-                    setSelectedLeadIds(prev =>
-                      e.target.checked ? [...prev, lead.id] : prev.filter(x => x !== lead.id)
-                    );
-                  }}
+                  onChange={e => toggleLeadSelection(lead.id, e.target.checked)}
                   className="rounded border-border"
                 />
                 <div>
                   <p className="text-sm font-medium">{lead.email}</p>
                   {lead.company && <p className="text-xs text-muted-foreground">{lead.company}</p>}
+                  {(lead.labels ?? []).length > 0 && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {(lead.labels ?? []).map((label) => label.name).join(", ")}
+                    </p>
+                  )}
                 </div>
               </label>
             ))}
           </div>
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setAddLeadOpen(false); setSelectedLeadIds([]); }} data-testid="button-cancel-add-leads">Cancel</Button>
+            <Button variant="outline" onClick={() => { setAddLeadOpen(false); setSelectedLeadIds([]); setSelectedAddLabelIds([]); }} data-testid="button-cancel-add-leads">Cancel</Button>
             <Button
               disabled={selectedLeadIds.length === 0 || addLeads.isPending}
               onClick={() => addLeads.mutate({ id, data: { leadIds: selectedLeadIds } })}

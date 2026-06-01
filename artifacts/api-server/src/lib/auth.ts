@@ -1,7 +1,7 @@
 import session from "express-session";
-import connectPgSimple from "connect-pg-simple";
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { RequestHandler } from "express";
+import { sqlite } from "@workspace/db";
 import { logger } from "./logger";
 
 declare module "express-session" {
@@ -12,6 +12,68 @@ declare module "express-session" {
 
 const DEFAULT_USERNAME = "admin";
 const DEFAULT_PASSWORD = "admin";
+
+class SqliteSessionStore extends session.Store {
+  get(sid: string, callback: (err: unknown, session?: session.SessionData | null) => void): void {
+    try {
+      const row = sqlite
+        .prepare("SELECT sess, expire FROM user_sessions WHERE sid = ?")
+        .get(sid) as { sess: string; expire: number } | undefined;
+
+      if (!row) {
+        callback(null, null);
+        return;
+      }
+
+      if (row.expire <= Date.now()) {
+        this.destroy(sid, () => callback(null, null));
+        return;
+      }
+
+      callback(null, JSON.parse(row.sess) as session.SessionData);
+    } catch (err) {
+      callback(err);
+    }
+  }
+
+  set(sid: string, sess: session.SessionData, callback?: (err?: unknown) => void): void {
+    try {
+      const expire = getSessionExpiry(sess);
+      sqlite
+        .prepare(
+          `INSERT INTO user_sessions (sid, sess, expire)
+           VALUES (?, ?, ?)
+           ON CONFLICT(sid) DO UPDATE SET sess = excluded.sess, expire = excluded.expire`,
+        )
+        .run(sid, JSON.stringify(sess), expire);
+      callback?.();
+    } catch (err) {
+      callback?.(err);
+    }
+  }
+
+  destroy(sid: string, callback?: (err?: unknown) => void): void {
+    try {
+      sqlite.prepare("DELETE FROM user_sessions WHERE sid = ?").run(sid);
+      callback?.();
+    } catch (err) {
+      callback?.(err);
+    }
+  }
+
+  touch(sid: string, sess: session.SessionData, callback?: () => void): void {
+    const expire = getSessionExpiry(sess);
+    sqlite.prepare("UPDATE user_sessions SET expire = ? WHERE sid = ?").run(expire, sid);
+    callback?.();
+  }
+}
+
+function getSessionExpiry(sess: session.SessionData): number {
+  const expires = sess.cookie.expires;
+  if (expires instanceof Date) return expires.getTime();
+  if (typeof expires === "string") return new Date(expires).getTime();
+  return Date.now() + (sess.cookie.maxAge ?? 1000 * 60 * 60 * 24 * 14);
+}
 
 function hash(s: string): Buffer {
   return createHash("sha256").update(s).digest();
@@ -42,19 +104,7 @@ export function buildSessionMiddleware(): RequestHandler {
   if (!secret) {
     throw new Error("SESSION_SECRET is required for session middleware");
   }
-  const dbUrl = process.env["DATABASE_URL"];
-  if (!dbUrl) {
-    throw new Error("DATABASE_URL is required for session middleware");
-  }
-  const PgStore = connectPgSimple(session);
-  const store = new PgStore({
-    conString: dbUrl,
-    tableName: "user_sessions",
-    // Table is declared in @workspace/db schema and created via drizzle-kit
-    // push, so we disable connect-pg-simple's auto-create (it reads a
-    // table.sql file that esbuild doesn't include in the production bundle).
-    createTableIfMissing: false,
-  });
+  const store = new SqliteSessionStore();
   if (isUsingDefaultCredentials()) {
     logger.warn(
       "ADMIN_USERNAME / ADMIN_PASSWORD are not set — falling back to admin/admin. Set these secrets before deploying.",

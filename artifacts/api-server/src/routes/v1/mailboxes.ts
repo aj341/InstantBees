@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, emailAccountsTable, type EmailAccount } from "@workspace/db";
+import { importEmailAccounts } from "../../lib/account-import";
 
 const router: IRouter = Router();
 
@@ -20,23 +21,46 @@ router.get("/mailboxes", async (req, res): Promise<void> => {
 // GET /api/v1/mailboxes/:id
 router.get("/mailboxes/:id", async (req, res): Promise<void> => {
   const rows = await db.select().from(emailAccountsTable).where(eq(emailAccountsTable.id, parseInt(req.params.id, 10)));
-  if (!rows[0]) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Mailbox not found" } }); return; }
+  if (!rows[0]) {
+    res.status(404).json({ error: { code: "NOT_FOUND", message: "Mailbox not found" } });
+    return;
+  }
   res.json(publicAccount(rows[0]));
 });
 
-// PATCH /api/v1/mailboxes/:id/limits — set daily sending limit and warmup
+// POST /api/v1/mailboxes/bulk - import sending accounts from JSON rows or CSV text
+router.post("/mailboxes/bulk", async (req, res): Promise<void> => {
+  try {
+    const result = await importEmailAccounts(req.body ?? {});
+    if (result.total === 0) {
+      res.status(400).json({ error: { code: "INVALID_INPUT", message: "Send accounts[] or csvText with mailbox rows." } });
+      return;
+    }
+    res.status(result.imported > 0 ? 201 : 200).json({ data: result });
+  } catch (err) {
+    res.status(400).json({ error: { code: "IMPORT_FAILED", message: err instanceof Error ? err.message : "Import failed" } });
+  }
+});
+
+// PATCH /api/v1/mailboxes/:id/limits - set daily sending limit and warmup
 router.patch("/mailboxes/:id/limits", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const { dailySendLimit, warmupEnabled } = req.body ?? {};
   const update: Record<string, unknown> = {};
   if (dailySendLimit !== undefined) {
     const limit = parseInt(String(dailySendLimit), 10);
-    if (isNaN(limit) || limit < 1) { res.status(400).json({ error: { code: "INVALID_INPUT", message: "'dailySendLimit' must be a positive integer" } }); return; }
+    if (isNaN(limit) || limit < 1) {
+      res.status(400).json({ error: { code: "INVALID_INPUT", message: "'dailySendLimit' must be a positive integer" } });
+      return;
+    }
     update.dailySendLimit = limit;
   }
   if (warmupEnabled !== undefined) update.warmupEnabled = Boolean(warmupEnabled);
   const [row] = await db.update(emailAccountsTable).set(update).where(eq(emailAccountsTable.id, id)).returning();
-  if (!row) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Mailbox not found" } }); return; }
+  if (!row) {
+    res.status(404).json({ error: { code: "NOT_FOUND", message: "Mailbox not found" } });
+    return;
+  }
   res.json(publicAccount(row));
 });
 

@@ -52,6 +52,8 @@ export interface Campaign {
   replyTo?: string | null;
   /** @nullable */
   dailyLimit?: number | null;
+  batchSize?: number;
+  batchIntervalMinutes?: number;
   trackOpens?: boolean;
   trackClicks?: boolean;
   includeUnsubscribe?: boolean;
@@ -71,6 +73,8 @@ export interface CampaignInput {
   fromName?: string;
   replyTo?: string;
   dailyLimit?: number;
+  batchSize?: number;
+  batchIntervalMinutes?: number;
   trackOpens?: boolean;
   trackClicks?: boolean;
   includeUnsubscribe?: boolean;
@@ -83,6 +87,8 @@ export interface CampaignUpdate {
   fromName?: string;
   replyTo?: string;
   dailyLimit?: number;
+  batchSize?: number;
+  batchIntervalMinutes?: number;
   trackOpens?: boolean;
   trackClicks?: boolean;
   includeUnsubscribe?: boolean;
@@ -96,6 +102,47 @@ export interface LinkClickRow {
   uniqueClicks: number;
   /** @nullable */
   lastClickedAt: string | null;
+  clicks?: LinkClickDetail[];
+}
+
+export interface LinkClickDetail {
+  leadId: number;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  company: string | null;
+  /** @nullable */
+  clickedAt: string | null;
+}
+
+export interface CampaignOpenRow {
+  leadId: number;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  company: string | null;
+  openedAt: string;
+  source: string;
+}
+
+export interface CampaignReplyRow {
+  leadId: number;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  company: string | null;
+  /** @nullable */
+  repliedAt: string | null;
+  /** @nullable */
+  subject: string | null;
+  /** @nullable */
+  body: string | null;
 }
 
 export interface CampaignStatsOverview {
@@ -114,6 +161,7 @@ export interface CampaignAnalytics {
   sent: number;
   opened: number;
   clicked: number;
+  uniqueClickedLeads?: number;
   replied: number;
   bounced: number;
   openRate: number;
@@ -352,6 +400,8 @@ export interface EmailAccount {
   dailySendLimit: number;
   sentToday?: number;
   /** @nullable */
+  sentTodayDate?: string | null;
+  /** @nullable */
   healthScore?: number | null;
   /** @nullable */
   smtpHost?: string | null;
@@ -359,6 +409,10 @@ export interface EmailAccount {
   smtpPort?: number | null;
   /** @nullable */
   smtpUsername?: string | null;
+  /** @nullable */
+  imapHost?: string | null;
+  /** @nullable */
+  imapPort?: number | null;
   hasSmtpPassword?: boolean;
   /** @nullable */
   lastError?: string | null;
@@ -383,6 +437,8 @@ export interface EmailAccountInput {
   smtpHost?: string;
   smtpPort?: number;
   smtpUsername?: string;
+  imapHost?: string;
+  imapPort?: number;
   /** SMTP password or app password. Stored encrypted; never returned. */
   smtpPassword?: string;
 }
@@ -405,6 +461,8 @@ export interface EmailAccountUpdate {
   smtpHost?: string;
   smtpPort?: number;
   smtpUsername?: string;
+  imapHost?: string;
+  imapPort?: number;
   smtpPassword?: string;
 }
 
@@ -518,6 +576,13 @@ export interface AnalyticsSummary {
   bounceRate: number;
   activeAccounts: number;
   activeCampaigns: number;
+  totalCampaigns?: number;
+  activeCampaignNames?: string[];
+  publicBaseUrl?: string;
+  publicTrackingUrl?: boolean;
+  /** @nullable */
+  lastInboxPollAt?: string | null;
+  inboxPollingErrors?: number;
 }
 
 export interface DailyStats {
@@ -538,4 +603,3 @@ campaignId?: number;
 export type AddLeadsToCampaign200 = {
   added: number;
 };
-

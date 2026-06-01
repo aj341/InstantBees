@@ -4,6 +4,7 @@ import {
   campaignsTable,
   campaignLeadsTable,
   sequenceStepsTable,
+  sequenceStepVariantsTable,
   leadsTable,
   emailSendJobsTable,
   emailAccountsTable,
@@ -32,21 +33,22 @@ router.post("/admin/reset", async (req, res): Promise<void> => {
   const { includeAccounts, includeTemplates } = parsed.data;
 
   // One transaction so concurrent inserts can't leave orphan rows mid-wipe.
-  await db.transaction(async (tx) => {
+  db.transaction((tx) => {
     // Order matters when there are dependent rows — clear child tables first.
-    await tx.delete(emailSendJobsTable);
-    await tx.delete(inboxMessagesTable);
-    await tx.delete(unsubscribesTable);
-    await tx.delete(sequenceStepsTable);
-    await tx.delete(campaignLeadsTable);
-    await tx.delete(listLeadsTable);
-    await tx.delete(dailyStatsTable);
-    await tx.delete(leadListsTable);
-    await tx.delete(campaignsTable);
-    await tx.delete(leadsTable);
+    tx.delete(emailSendJobsTable).run();
+    tx.delete(inboxMessagesTable).run();
+    tx.delete(unsubscribesTable).run();
+    tx.delete(sequenceStepVariantsTable).run();
+    tx.delete(sequenceStepsTable).run();
+    tx.delete(campaignLeadsTable).run();
+    tx.delete(listLeadsTable).run();
+    tx.delete(dailyStatsTable).run();
+    tx.delete(leadListsTable).run();
+    tx.delete(campaignsTable).run();
+    tx.delete(leadsTable).run();
 
-    if (includeAccounts === true) await tx.delete(emailAccountsTable);
-    if (includeTemplates === true) await tx.delete(emailTemplatesTable);
+    if (includeAccounts === true) tx.delete(emailAccountsTable).run();
+    if (includeTemplates === true) tx.delete(emailTemplatesTable).run();
   });
 
   res.json({ ok: true });

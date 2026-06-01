@@ -1,15 +1,15 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const dailyStatsTable = pgTable("daily_stats", {
-  id: serial("id").primaryKey(),
+export const dailyStatsTable = sqliteTable("daily_stats", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   date: text("date").notNull().unique(),
   sent: integer("sent").notNull().default(0),
   opened: integer("opened").notNull().default(0),
   replied: integer("replied").notNull().default(0),
   bounced: integer("bounced").notNull().default(0),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
 export const insertDailyStatsSchema = createInsertSchema(dailyStatsTable).omit({ id: true, createdAt: true });

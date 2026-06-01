@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, inArray } from "drizzle-orm";
-import { db, labelsTable, leadLabelsTable, leadsTable } from "@workspace/db";
+import { db, labelsTable, leadLabelsTable, leadsTable, sequenceStepVariantsTable } from "@workspace/db";
 import { CreateLabelBody, SetLeadLabelsBody, SetLeadLabelsParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -39,6 +39,7 @@ router.delete("/labels/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid label id" });
     return;
   }
+  await db.delete(sequenceStepVariantsTable).where(eq(sequenceStepVariantsTable.labelId, id));
   await db.delete(leadLabelsTable).where(eq(leadLabelsTable.labelId, id));
   await db.delete(labelsTable).where(eq(labelsTable.id, id));
   res.sendStatus(204);
@@ -58,26 +59,28 @@ router.put("/leads/:id/labels", async (req, res): Promise<void> => {
   }
   const leadId = params.data.id;
 
-  const result = await db.transaction(async (tx) => {
-    const [lead] = await tx.select().from(leadsTable).where(eq(leadsTable.id, leadId));
+  const result = db.transaction((tx) => {
+    const [lead] = tx.select().from(leadsTable).where(eq(leadsTable.id, leadId)).all();
     if (!lead) return null;
 
-    await tx.delete(leadLabelsTable).where(eq(leadLabelsTable.leadId, leadId));
+    tx.delete(leadLabelsTable).where(eq(leadLabelsTable.leadId, leadId)).run();
     if (body.data.labelIds.length > 0) {
-      const valid = await tx
+      const valid = tx
         .select({ id: labelsTable.id })
         .from(labelsTable)
-        .where(inArray(labelsTable.id, body.data.labelIds));
+        .where(inArray(labelsTable.id, body.data.labelIds))
+        .all();
       const validIds = valid.map((v) => v.id);
       if (validIds.length > 0) {
-        await tx
+        tx
           .insert(leadLabelsTable)
           .values(validIds.map((labelId) => ({ leadId, labelId })))
-          .onConflictDoNothing();
+          .onConflictDoNothing()
+          .run();
       }
     }
 
-    const labels = await tx
+    const labels = tx
       .select({
         id: labelsTable.id,
         name: labelsTable.name,
@@ -86,7 +89,8 @@ router.put("/leads/:id/labels", async (req, res): Promise<void> => {
       })
       .from(leadLabelsTable)
       .innerJoin(labelsTable, eq(leadLabelsTable.labelId, labelsTable.id))
-      .where(eq(leadLabelsTable.leadId, leadId));
+      .where(eq(leadLabelsTable.leadId, leadId))
+      .all();
 
     return { ...lead, labels };
   });

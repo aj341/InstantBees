@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, sql, isNull } from "drizzle-orm";
 import { db, emailSendJobsTable, campaignsTable, leadsTable, unsubscribesTable, clickEventsTable } from "@workspace/db";
+import { logger } from "../lib/logger";
 import { verifyClickSignature } from "../lib/mailer";
 
 const router: IRouter = Router();
@@ -42,7 +43,8 @@ router.get("/track/open/:token.gif", async (req, res): Promise<void> => {
         .set({ openCount: sql`${emailSendJobsTable.openCount} + 1` })
         .where(eq(emailSendJobsTable.id, job.id));
     }
-  } catch {
+  } catch (err) {
+    logger.error({ err, token }, "Failed to record email open");
     // Swallow — pixel must always succeed
   }
 });
@@ -93,24 +95,30 @@ router.get("/track/click/:token", async (req, res): Promise<void> => {
     });
 
     // Atomic first-click: row update only succeeds if firstClickedAt was NULL.
+    const clickedAt = new Date();
     const firstClickSet = await db
       .update(emailSendJobsTable)
-      .set({ clickCount: sql`${emailSendJobsTable.clickCount} + 1`, firstClickedAt: new Date() })
+      .set({
+        clickCount: sql`${emailSendJobsTable.clickCount} + 1`,
+        firstClickedAt: clickedAt,
+        firstOpenedAt: job.firstOpenedAt ?? clickedAt,
+      })
       .where(and(eq(emailSendJobsTable.id, job.id), isNull(emailSendJobsTable.firstClickedAt)))
       .returning({ id: emailSendJobsTable.id });
 
     if (firstClickSet.length > 0) {
-      await db
-        .update(campaignsTable)
-        .set({ clickCount: sql`${campaignsTable.clickCount} + 1` })
-        .where(eq(campaignsTable.id, job.campaignId));
+      // Campaign clickCount tracks total raw clicks. Unique clicked leads are
+      // derived from click_events for reporting.
+      await db.update(campaignsTable).set({ clickCount: sql`${campaignsTable.clickCount} + 1` }).where(eq(campaignsTable.id, job.campaignId));
     } else {
       await db
         .update(emailSendJobsTable)
         .set({ clickCount: sql`${emailSendJobsTable.clickCount} + 1` })
         .where(eq(emailSendJobsTable.id, job.id));
+      await db.update(campaignsTable).set({ clickCount: sql`${campaignsTable.clickCount} + 1` }).where(eq(campaignsTable.id, job.campaignId));
     }
-  } catch {
+  } catch (err) {
+    logger.error({ err, token, target: parsedTarget.toString() }, "Failed to record link click");
     // Swallow — redirect already sent
   }
 });

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray } from "drizzle-orm";
-import { db, leadsTable, campaignLeadsTable, campaignsTable, labelsTable, leadLabelsTable, emailSendJobsTable, sequenceStepsTable, type Lead, type Label } from "@workspace/db";
+import { db, leadsTable, campaignLeadsTable, campaignsTable, labelsTable, leadLabelsTable, emailSendJobsTable, sequenceStepsTable, clickEventsTable, inboxMessagesTable, type Lead, type Label } from "@workspace/db";
 import {
   CreateLeadBody,
   UpdateLeadBody,
@@ -13,6 +13,7 @@ import {
   BulkImportLeadsBody,
 } from "@workspace/api-zod";
 import { parseLeadsCsv, type LeadRow } from "../lib/csv";
+import { classifyReply } from "../lib/reply-classifier";
 
 const router: IRouter = Router();
 
@@ -38,6 +39,128 @@ async function attachLabels<T extends Pick<Lead, "id">>(leads: T[]): Promise<(T 
     byLead.set(leadId, list);
   }
   return leads.map((l) => ({ ...l, labels: byLead.get(l.id) ?? [] }));
+}
+
+function isoDate(value: Date | string | number | null | undefined): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+function latestIso(values: Array<Date | string | number | null | undefined>): string | null {
+  let latest: number | null = null;
+  for (const value of values) {
+    if (!value) continue;
+    const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
+    if (!Number.isFinite(time)) continue;
+    if (latest === null || time > latest) latest = time;
+  }
+  return latest === null ? null : new Date(latest).toISOString();
+}
+
+function sentLike(job: typeof emailSendJobsTable.$inferSelect): boolean {
+  return job.status === "sent" || !!job.sentAt;
+}
+
+async function sequenceProgressForCampaign(campaignId: number, leadIds: number[]) {
+  if (leadIds.length === 0) return new Map<number, unknown>();
+
+  const [steps, jobs] = await Promise.all([
+    db
+      .select()
+      .from(sequenceStepsTable)
+      .where(eq(sequenceStepsTable.campaignId, campaignId)),
+    db
+      .select()
+      .from(emailSendJobsTable)
+      .where(and(eq(emailSendJobsTable.campaignId, campaignId), inArray(emailSendJobsTable.leadId, leadIds))),
+  ]);
+
+  const sortedSteps = [...steps].sort((a, b) => a.stepNumber - b.stepNumber);
+  const stepById = new Map(sortedSteps.map((step) => [step.id, step]));
+  const jobsByLead = new Map<number, typeof jobs>();
+  for (const job of jobs) {
+    const list = jobsByLead.get(job.leadId) ?? [];
+    list.push(job);
+    jobsByLead.set(job.leadId, list);
+  }
+
+  const result = new Map<number, unknown>();
+  for (const leadId of leadIds) {
+    const leadJobs = jobsByLead.get(leadId) ?? [];
+    const sortedJobs = [...leadJobs].sort((a, b) => {
+      const aStep = stepById.get(a.stepId)?.stepNumber ?? Number.MAX_SAFE_INTEGER;
+      const bStep = stepById.get(b.stepId)?.stepNumber ?? Number.MAX_SAFE_INTEGER;
+      if (aStep !== bStep) return aStep - bStep;
+      const aTime = a.scheduledAt ? new Date(a.scheduledAt).getTime() : 0;
+      const bTime = b.scheduledAt ? new Date(b.scheduledAt).getTime() : 0;
+      return aTime - bTime;
+    });
+
+    const sentJobs = sortedJobs.filter(sentLike);
+    const sentStepNumbers = sentJobs
+      .map((job) => stepById.get(job.stepId)?.stepNumber)
+      .filter((stepNumber): stepNumber is number => typeof stepNumber === "number");
+    const currentStepNumber = sentStepNumbers.length > 0 ? Math.max(...sentStepNumbers) : 0;
+    const pendingJobs = sortedJobs
+      .filter((job) => job.status === "pending" || job.status === "in_progress")
+      .sort((a, b) => {
+        const aTime = a.scheduledAt ? new Date(a.scheduledAt).getTime() : Number.POSITIVE_INFINITY;
+        const bTime = b.scheduledAt ? new Date(b.scheduledAt).getTime() : Number.POSITIVE_INFINITY;
+        return aTime - bTime;
+      });
+    const nextJob = pendingJobs[0] ?? null;
+    const nextStep = nextJob ? stepById.get(nextJob.stepId) : null;
+    const currentStep = currentStepNumber > 0
+      ? sortedSteps.find((step) => step.stepNumber === currentStepNumber) ?? null
+      : null;
+
+    const bounced = sortedJobs.some((job) => !!job.bounceKind);
+    const replied = sortedJobs.some((job) => !!job.repliedAt);
+    const inProgress = sortedJobs.some((job) => job.status === "in_progress");
+    const failed = sortedJobs.some((job) => job.status === "failed");
+    const completed = sortedSteps.length > 0 && sentStepNumbers.length >= sortedSteps.length;
+    const queued = sortedJobs.length > 0;
+    const sequenceStatus = bounced
+      ? "bounced"
+      : replied
+        ? "replied"
+        : completed
+          ? "completed"
+          : inProgress
+            ? "sending"
+            : nextJob
+              ? "scheduled"
+              : failed
+                ? "failed"
+                : queued
+                  ? "waiting"
+                  : "not_queued";
+
+    result.set(leadId, {
+      status: sequenceStatus,
+      currentStepNumber,
+      currentStepSubject: currentStep?.subject ?? null,
+      nextStepNumber: nextStep?.stepNumber ?? null,
+      nextStepSubject: nextStep?.subject ?? null,
+      nextScheduledAt: isoDate(nextJob?.scheduledAt),
+      totalSteps: sortedSteps.length,
+      sentSteps: new Set(sentJobs.map((job) => job.stepId)).size,
+      queuedSteps: sortedJobs.length,
+      opened: sortedJobs.some((job) => job.openCount > 0),
+      clicked: sortedJobs.some((job) => job.clickCount > 0),
+      replied,
+      bounced,
+      failed,
+      lastSentAt: latestIso(sortedJobs.map((job) => job.sentAt)),
+      lastOpenedAt: latestIso(sortedJobs.map((job) => job.firstOpenedAt)),
+      lastClickedAt: latestIso(sortedJobs.map((job) => job.firstClickedAt)),
+      lastRepliedAt: latestIso(sortedJobs.map((job) => job.repliedAt)),
+      lastEventAt: latestIso(sortedJobs.flatMap((job) => [job.sentAt, job.firstOpenedAt, job.firstClickedAt, job.repliedAt, job.scheduledAt])),
+    });
+  }
+
+  return result;
 }
 
 router.get("/leads", async (_req, res): Promise<void> => {
@@ -102,6 +225,11 @@ router.post("/leads/bulk", async (req, res): Promise<void> => {
     campaignId = parsed.data.campaignId ?? undefined;
   }
 
+  if (rawLeads.length === 0) {
+    res.status(400).json({ error: "No valid leads found. Make sure the CSV has an email column and at least one valid email address." });
+    return;
+  }
+
   let imported = 0;
   let skipped = 0;
   const leadIds: number[] = [];
@@ -117,6 +245,7 @@ router.post("/leads/bulk", async (req, res): Promise<void> => {
           lastName: lead.lastName || null,
           company: lead.company || null,
           title: lead.title || null,
+          roleTitle: lead.roleTitle || null,
           website: lead.website || null,
           phone: lead.phone || null,
         })
@@ -166,7 +295,30 @@ router.post("/leads", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [lead] = await db.insert(leadsTable).values(parsed.data).returning();
+
+  const email = parsed.data.email.toLowerCase().trim();
+  if (!email.includes("@")) {
+    res.status(400).json({ error: "A valid email address is required" });
+    return;
+  }
+
+  const [existing] = await db.select({ id: leadsTable.id }).from(leadsTable).where(eq(leadsTable.email, email)).limit(1);
+  if (existing) {
+    res.status(409).json({ error: `Lead already exists for ${email}` });
+    return;
+  }
+
+  const [lead] = await db.insert(leadsTable).values({
+    ...parsed.data,
+    email,
+    firstName: parsed.data.firstName?.trim() || null,
+    lastName: parsed.data.lastName?.trim() || null,
+    company: parsed.data.company?.trim() || null,
+    title: parsed.data.title?.trim() || null,
+    roleTitle: parsed.data.roleTitle?.trim() || null,
+    website: parsed.data.website?.trim() || null,
+    phone: parsed.data.phone?.trim() || null,
+  }).returning();
   res.status(201).json({ ...lead, labels: [] });
 });
 
@@ -250,6 +402,12 @@ router.get("/leads/:id/activity", async (req, res): Promise<void> => {
   const steps = campaignIds.length > 0
     ? await db.select().from(sequenceStepsTable).where(inArray(sequenceStepsTable.campaignId, campaignIds))
     : [];
+  const clicks = campaignIds.length > 0
+    ? await db.select().from(clickEventsTable).where(and(eq(clickEventsTable.leadId, leadId), inArray(clickEventsTable.campaignId, campaignIds)))
+    : [];
+  const replies = campaignIds.length > 0
+    ? await db.select().from(inboxMessagesTable).where(and(eq(inboxMessagesTable.leadId, leadId), inArray(inboxMessagesTable.campaignId, campaignIds)))
+    : [];
 
   const stepsByCampaign = new Map<number, typeof steps>();
   for (const s of steps) {
@@ -319,7 +477,59 @@ router.get("/leads/:id/activity", async (req, res): Promise<void> => {
     };
   });
 
-  res.json({ leadId, campaigns: activity });
+  const campaignsById = new Map(enrollments.map((e) => [e.campaign.id, e.campaign]));
+  const stepsById = new Map(steps.map((s) => [s.id, s]));
+  const timeline = [
+    ...jobs.flatMap((job) => {
+      const campaign = campaignsById.get(job.campaignId);
+      const step = stepsById.get(job.stepId);
+      const base = {
+        campaignId: job.campaignId,
+        campaignName: campaign?.name ?? `Campaign #${job.campaignId}`,
+        stepNumber: step?.stepNumber ?? null,
+        subject: step?.subject ?? "",
+      };
+      const rows = [{
+        ...base,
+        eventType: job.status === "failed" ? "failed" : job.status === "skipped" ? "skipped" : "scheduled",
+        occurredAt: job.scheduledAt ? new Date(job.scheduledAt).toISOString() : null,
+        detail: job.errorMessage ?? `Step ${step?.stepNumber ?? "?"} queued`,
+      }];
+      if (job.sentAt) rows.push({ ...base, eventType: "sent", occurredAt: new Date(job.sentAt).toISOString(), detail: step?.subject ?? "" });
+      if (job.firstOpenedAt) rows.push({ ...base, eventType: "opened", occurredAt: new Date(job.firstOpenedAt).toISOString(), detail: `${job.openCount} open${job.openCount === 1 ? "" : "s"}` });
+      if (job.firstClickedAt) rows.push({ ...base, eventType: "clicked", occurredAt: new Date(job.firstClickedAt).toISOString(), detail: `${job.clickCount} click${job.clickCount === 1 ? "" : "s"}` });
+      if (job.repliedAt) rows.push({ ...base, eventType: "replied", occurredAt: new Date(job.repliedAt).toISOString(), detail: "Reply received" });
+      if (job.bounceKind) rows.push({ ...base, eventType: "bounced", occurredAt: new Date(job.sentAt ?? job.scheduledAt).toISOString(), detail: `${job.bounceKind} bounce` });
+      return rows;
+    }),
+    ...clicks.map((click) => {
+      const campaign = campaignsById.get(click.campaignId);
+      return {
+        campaignId: click.campaignId,
+        campaignName: campaign?.name ?? `Campaign #${click.campaignId}`,
+        stepNumber: null,
+        subject: "",
+        eventType: "link_click",
+        occurredAt: new Date(click.clickedAt).toISOString(),
+        detail: click.url,
+      };
+    }),
+    ...replies.map((reply) => {
+      const campaign = reply.campaignId ? campaignsById.get(reply.campaignId) : null;
+      const classification = classifyReply(reply);
+      return {
+        campaignId: reply.campaignId,
+        campaignName: campaign?.name ?? (reply.campaignId ? `Campaign #${reply.campaignId}` : ""),
+        stepNumber: null,
+        subject: reply.subject,
+        eventType: classification.category === "bounce" ? "bounce_reply" : "reply",
+        occurredAt: new Date(reply.receivedAt).toISOString(),
+        detail: classification.category,
+      };
+    }),
+  ].filter((row) => row.occurredAt).sort((a, b) => new Date(b.occurredAt!).getTime() - new Date(a.occurredAt!).getTime());
+
+  res.json({ leadId, campaigns: activity, timeline });
 });
 
 router.get("/campaigns/:id/leads", async (req, res): Promise<void> => {
@@ -334,7 +544,13 @@ router.get("/campaigns/:id/leads", async (req, res): Promise<void> => {
     .from(campaignLeadsTable)
     .innerJoin(leadsTable, eq(campaignLeadsTable.leadId, leadsTable.id))
     .where(eq(campaignLeadsTable.campaignId, params.data.id));
-  res.json(await attachLabels(campaignLeads.map(r => r.lead)));
+  const leads = campaignLeads.map(r => r.lead);
+  const progressByLead = await sequenceProgressForCampaign(params.data.id, leads.map((lead) => lead.id));
+  const withLabels = await attachLabels(leads);
+  res.json(withLabels.map((lead) => ({
+    ...lead,
+    sequenceProgress: progressByLead.get(lead.id) ?? null,
+  })));
 });
 
 router.post("/campaigns/:id/leads", async (req, res): Promise<void> => {

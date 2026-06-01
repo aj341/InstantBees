@@ -1,8 +1,9 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, ilike, or, and, inArray } from "drizzle-orm";
-import { db, leadsTable, leadListsTable, listLeadsTable, campaignLeadsTable, campaignsTable, labelsTable, leadLabelsTable, type Lead, type Label } from "@workspace/db";
+import { db, leadsTable, leadListsTable, listLeadsTable, campaignLeadsTable, campaignsTable, labelsTable, leadLabelsTable, sequenceStepVariantsTable, type Lead, type Label } from "@workspace/db";
+import { importContacts, customFieldsForLead, type DuplicateMode } from "../../lib/contact-import";
 
-async function attachLabelsToContacts<T extends Pick<Lead, "id">>(contacts: T[]): Promise<(T & { labels: Label[] })[]> {
+async function attachLabelsToContacts<T extends Pick<Lead, "id">>(contacts: T[]): Promise<(T & { customFields?: Record<string, string | number | boolean>; labels: Label[] })[]> {
   if (contacts.length === 0) return [];
   const ids = contacts.map((c) => c.id);
   const rows = await db
@@ -17,7 +18,11 @@ async function attachLabelsToContacts<T extends Pick<Lead, "id">>(contacts: T[])
     list.push(lbl as Label);
     byLead.set(leadId, list);
   }
-  return contacts.map((c) => ({ ...c, labels: byLead.get(c.id) ?? [] }));
+  return contacts.map((c) => ({
+    ...c,
+    customFields: "customFieldsJson" in c ? customFieldsForLead(c as Pick<Lead, "customFieldsJson">) : undefined,
+    labels: byLead.get(c.id) ?? [],
+  }));
 }
 
 async function resolveLabelIds(rawLabelIds: unknown): Promise<number[]> {
@@ -28,7 +33,46 @@ async function resolveLabelIds(rawLabelIds: unknown): Promise<number[]> {
   return valid.map((v) => v.id);
 }
 
+function duplicateMode(value: unknown): DuplicateMode {
+  return value === "update" || value === "error" || value === "skip" ? value : "skip";
+}
+
 const router: IRouter = Router();
+
+async function appendContactsToList(req: Request, res: Response, listId: number): Promise<void> {
+  const listRows = await db.select().from(leadListsTable).where(eq(leadListsTable.id, listId));
+  if (!listRows[0]) {
+    res.status(404).json({ error: { code: "NOT_FOUND", message: "List not found" } });
+    return;
+  }
+
+  const { contacts, csvText, labelIds: rawLabelIds, onDuplicate } = req.body ?? {};
+  if (!Array.isArray(contacts) && typeof csvText !== "string") {
+    res.status(400).json({ error: { code: "INVALID_INPUT", message: "Provide 'contacts' array or 'csvText' string" } });
+    return;
+  }
+
+  const result = await importContacts({
+    contacts: Array.isArray(contacts) ? contacts : [],
+    csvText: typeof csvText === "string" ? csvText : undefined,
+    listId,
+    onDuplicate: duplicateMode(onDuplicate),
+  });
+
+  const validLabelIds = await resolveLabelIds(rawLabelIds);
+  let labelsApplied = 0;
+  if (validLabelIds.length > 0 && result.leadIds.length > 0) {
+    const linkRows = result.leadIds.flatMap((leadId) => validLabelIds.map((labelId) => ({ leadId, labelId })));
+    await db.insert(leadLabelsTable).values(linkRows).onConflictDoNothing();
+    labelsApplied = validLabelIds.length;
+  }
+
+  res.json({
+    ...result,
+    added: result.created,
+    labelsApplied,
+  });
+}
 
 // ── Lists ──────────────────────────────────────────────────────────────────
 
@@ -71,73 +115,19 @@ router.delete("/lists/:listId", async (req, res): Promise<void> => {
 // POST /api/v1/lists/:listId/contacts/bulk
 router.post("/lists/:listId/contacts/bulk", async (req, res): Promise<void> => {
   const listId = parseInt(req.params.listId, 10);
-  const listRows = await db.select().from(leadListsTable).where(eq(leadListsTable.id, listId));
-  if (!listRows[0]) { res.status(404).json({ error: { code: "NOT_FOUND", message: "List not found" } }); return; }
+  await appendContactsToList(req, res, listId);
+});
 
-  type Row = { email: string; firstName?: string; lastName?: string; company?: string; title?: string; website?: string; phone?: string };
-  let rawContacts: Row[] = [];
+// POST /api/v1/lists/:listId/contacts
+router.post("/lists/:listId/contacts", async (req, res): Promise<void> => {
+  const listId = parseInt(req.params.listId, 10);
+  await appendContactsToList(req, res, listId);
+});
 
-  const { contacts, csvText, labelIds: rawLabelIds } = req.body ?? {};
-
-  if (csvText && typeof csvText === "string") {
-    const lines = csvText.trim().split("\n");
-    const headers = lines[0].split(",").map((h: string) => h.trim().toLowerCase().replace(/[^a-z]/g, ""));
-    const col = (name: string) => { const i = headers.indexOf(name); return i >= 0 ? i : -1; };
-    const emailIdx = col("email");
-    if (emailIdx === -1) { res.status(400).json({ error: { code: "INVALID_INPUT", message: "CSV must have an 'email' column" } }); return; }
-    for (let i = 1; i < lines.length; i++) {
-      const cells = lines[i].split(",").map((c: string) => c.trim().replace(/^"|"$/g, ""));
-      const email = cells[emailIdx];
-      if (!email?.includes("@")) continue;
-      rawContacts.push({
-        email,
-        firstName: col("firstname") >= 0 ? cells[col("firstname")] || undefined : undefined,
-        lastName: col("lastname") >= 0 ? cells[col("lastname")] || undefined : undefined,
-        company: col("company") >= 0 ? cells[col("company")] || undefined : undefined,
-        title: col("title") >= 0 ? cells[col("title")] || undefined : undefined,
-        website: col("website") >= 0 ? cells[col("website")] || undefined : undefined,
-        phone: col("phone") >= 0 ? cells[col("phone")] || undefined : undefined,
-      });
-    }
-  } else if (Array.isArray(contacts)) {
-    rawContacts = contacts as Row[];
-  } else {
-    res.status(400).json({ error: { code: "INVALID_INPUT", message: "Provide 'contacts' array or 'csvText' string" } });
-    return;
-  }
-
-  let added = 0, skipped = 0;
-  const addedIds: number[] = [];
-
-  for (const c of rawContacts) {
-    if (!c.email?.includes("@")) { skipped++; continue; }
-    try {
-      const [row] = await db.insert(leadsTable)
-        .values({ email: c.email.toLowerCase().trim(), firstName: c.firstName || null, lastName: c.lastName || null, company: c.company || null, title: c.title || null, website: c.website || null, phone: c.phone || null })
-        .onConflictDoNothing()
-        .returning();
-      if (row) { added++; addedIds.push(row.id); } else {
-        const existing = await db.select().from(leadsTable).where(eq(leadsTable.email, c.email.toLowerCase().trim()));
-        if (existing[0]) addedIds.push(existing[0].id);
-        skipped++;
-      }
-    } catch { skipped++; }
-  }
-
-  if (addedIds.length > 0) {
-    await db.insert(listLeadsTable).values(addedIds.map(lid => ({ listId, leadId: lid }))).onConflictDoNothing();
-  }
-
-  // Apply labels to every contact that was added or already existed.
-  const validLabelIds = await resolveLabelIds(rawLabelIds);
-  let labelsApplied = 0;
-  if (validLabelIds.length > 0 && addedIds.length > 0) {
-    const linkRows = addedIds.flatMap((lid) => validLabelIds.map((labelId) => ({ leadId: lid, labelId })));
-    await db.insert(leadLabelsTable).values(linkRows).onConflictDoNothing();
-    labelsApplied = validLabelIds.length;
-  }
-
-  res.json({ added, skipped, total: rawContacts.length, labelsApplied });
+// POST /api/v1/segments/:listId/contacts
+router.post("/segments/:listId/contacts", async (req, res): Promise<void> => {
+  const listId = parseInt(req.params.listId, 10);
+  await appendContactsToList(req, res, listId);
 });
 
 // ── Contacts (leads) ───────────────────────────────────────────────────────
@@ -193,21 +183,35 @@ router.get("/contacts/:id", async (req, res): Promise<void> => {
 
 // POST /api/v1/contacts
 router.post("/contacts", async (req, res): Promise<void> => {
-  const { email, firstName, lastName, company, title, website, phone, labelIds: rawLabelIds } = req.body ?? {};
+  const { email, labelIds: rawLabelIds, onDuplicate } = req.body ?? {};
   if (!email || !String(email).includes("@")) {
     res.status(400).json({ error: { code: "INVALID_INPUT", message: "Valid 'email' is required" } });
     return;
   }
   try {
-    const [row] = await db.insert(leadsTable).values({ email: String(email).toLowerCase().trim(), firstName: firstName || null, lastName: lastName || null, company: company || null, title: title || null, website: website || null, phone: phone || null }).returning();
+    const result = await importContacts({
+      contacts: [req.body ?? {}],
+      onDuplicate: duplicateMode(onDuplicate),
+    });
+    const leadId = result.createdIds[0] ?? result.updatedIds[0] ?? result.leadIds[0];
+    if (!leadId) {
+      const failure = result.failures[0]?.reason ?? result.skippedContacts[0]?.reason ?? "Contact import failed";
+      res.status(result.skipped > 0 ? 409 : 400).json({ error: { code: result.skipped > 0 ? "CONFLICT" : "INVALID_INPUT", message: failure }, import: result });
+      return;
+    }
     const validLabelIds = await resolveLabelIds(rawLabelIds);
     if (validLabelIds.length > 0) {
-      await db.insert(leadLabelsTable).values(validLabelIds.map((labelId) => ({ leadId: row.id, labelId }))).onConflictDoNothing();
+      await db.insert(leadLabelsTable).values(validLabelIds.map((labelId) => ({ leadId, labelId }))).onConflictDoNothing();
+    }
+    const [row] = await db.select().from(leadsTable).where(eq(leadsTable.id, leadId));
+    if (!row) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: "Contact not found after import" } });
+      return;
     }
     const [withLabels] = await attachLabelsToContacts([row]);
-    res.status(201).json(withLabels);
-  } catch {
-    res.status(409).json({ error: { code: "CONFLICT", message: "Email already exists" } });
+    res.status(result.created > 0 ? 201 : 200).json({ ...withLabels, import: result });
+  } catch (err) {
+    res.status(400).json({ error: { code: "CONTACT_IMPORT_FAILED", message: err instanceof Error ? err.message : "Contact import failed" } });
   }
 });
 
@@ -218,13 +222,13 @@ router.put("/contacts/:id/labels", async (req, res): Promise<void> => {
   const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
   if (!lead) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Contact not found" } }); return; }
   const validLabelIds = await resolveLabelIds(rawLabelIds);
-  const result = await db.transaction(async (tx) => {
-    await tx.delete(leadLabelsTable).where(eq(leadLabelsTable.leadId, id));
+  db.transaction((tx) => {
+    tx.delete(leadLabelsTable).where(eq(leadLabelsTable.leadId, id)).run();
     if (validLabelIds.length > 0) {
-      await tx.insert(leadLabelsTable).values(validLabelIds.map((labelId) => ({ leadId: id, labelId }))).onConflictDoNothing();
+      tx.insert(leadLabelsTable).values(validLabelIds.map((labelId) => ({ leadId: id, labelId }))).onConflictDoNothing().run();
     }
-    return await attachLabelsToContacts([lead]);
   });
+  const result = await attachLabelsToContacts([lead]);
   res.json(result[0]);
 });
 
@@ -254,6 +258,7 @@ router.post("/labels", async (req, res): Promise<void> => {
 router.delete("/labels/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) { res.status(400).json({ error: { code: "INVALID_INPUT", message: "Invalid label id" } }); return; }
+  await db.delete(sequenceStepVariantsTable).where(eq(sequenceStepVariantsTable.labelId, id));
   await db.delete(labelsTable).where(eq(labelsTable.id, id));
   res.status(204).end();
 });
@@ -261,18 +266,24 @@ router.delete("/labels/:id", async (req, res): Promise<void> => {
 // PATCH /api/v1/contacts/:id
 router.patch("/contacts/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const { firstName, lastName, company, title, website, phone, status } = req.body ?? {};
+  const { firstName, lastName, company, title, roleTitle, role_title, website, phone, status, linkedinUrl, customFields } = req.body ?? {};
   const update: Record<string, unknown> = {};
   if (firstName !== undefined) update.firstName = firstName || null;
   if (lastName !== undefined) update.lastName = lastName || null;
   if (company !== undefined) update.company = company || null;
   if (title !== undefined) update.title = title || null;
+  if (roleTitle !== undefined || role_title !== undefined) update.roleTitle = roleTitle || role_title || null;
   if (website !== undefined) update.website = website || null;
   if (phone !== undefined) update.phone = phone || null;
+  if (linkedinUrl !== undefined) update.linkedinUrl = linkedinUrl || null;
+  if (customFields !== undefined) update.customFieldsJson = customFields && typeof customFields === "object" && !Array.isArray(customFields)
+    ? JSON.stringify(customFields)
+    : null;
   if (status !== undefined) update.status = status;
   const [row] = await db.update(leadsTable).set(update).where(eq(leadsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Contact not found" } }); return; }
-  res.json(row);
+  const [withLabels] = await attachLabelsToContacts([row]);
+  res.json(withLabels);
 });
 
 // DELETE /api/v1/contacts/:id

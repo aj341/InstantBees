@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db, emailAccountsTable, type EmailAccount } from "@workspace/db";
 import {
   CreateAccountBody,
@@ -9,6 +9,12 @@ import {
 } from "@workspace/api-zod";
 import { encryptSecret } from "../lib/crypto";
 import { sendEmail, verifyTransport } from "../lib/mailer";
+import {
+  hasPendingJobsForAccount,
+  rebalancePendingJobsForActiveCampaigns,
+  reassignPendingJobsForAccount,
+} from "../lib/account-rotation";
+import { importEmailAccounts } from "../lib/account-import";
 
 const router: IRouter = Router();
 
@@ -17,7 +23,29 @@ function publicAccount(a: EmailAccount) {
   return { ...rest, hasSmtpPassword: !!smtpPasswordEnc };
 }
 
+function normalizeAccountStatus(input: Partial<EmailAccount>): Partial<EmailAccount> {
+  if (input.warmupEnabled === true && !input.status) return { ...input, status: "warming" };
+  if (input.warmupEnabled === false && input.status === "warming") return { ...input, status: "connected" };
+  return input;
+}
+
+function cleanAccountInput<T extends Partial<EmailAccount>>(input: T): T {
+  return {
+    ...input,
+    email: input.email?.toLowerCase().trim(),
+    name: input.name?.trim() || null,
+    smtpHost: input.smtpHost?.trim() || null,
+    smtpUsername: input.smtpUsername?.trim() || null,
+    imapHost: input.imapHost?.trim() || null,
+  };
+}
+
 router.get("/accounts", async (_req, res): Promise<void> => {
+  const today = new Date().toISOString().slice(0, 10);
+  await db
+    .update(emailAccountsTable)
+    .set({ sentToday: 0, sentTodayDate: today })
+    .where(sql`${emailAccountsTable.sentTodayDate} is null or ${emailAccountsTable.sentTodayDate} <> ${today}`);
   const accounts = await db.select().from(emailAccountsTable).orderBy(emailAccountsTable.createdAt);
   res.json(accounts.map(publicAccount));
 });
@@ -29,7 +57,13 @@ router.post("/accounts", async (req, res): Promise<void> => {
     return;
   }
   const { smtpPassword, ...rest } = parsed.data as typeof parsed.data & { smtpPassword?: string };
-  const values: Partial<EmailAccount> & { email: string; provider: EmailAccount["provider"] } = { ...rest } as any;
+  const email = rest.email.toLowerCase().trim();
+  const [existing] = await db.select({ id: emailAccountsTable.id }).from(emailAccountsTable).where(eq(emailAccountsTable.email, email)).limit(1);
+  if (existing) {
+    res.status(409).json({ error: `Email account already exists for ${email}` });
+    return;
+  }
+  const values: Partial<EmailAccount> & { email: string; provider: EmailAccount["provider"] } = normalizeAccountStatus(cleanAccountInput({ ...rest, email } as any)) as any;
   if (smtpPassword) {
     values.smtpPasswordEnc = encryptSecret(smtpPassword);
   }
@@ -38,7 +72,23 @@ router.post("/accounts", async (req, res): Promise<void> => {
     res.status(500).json({ error: "Failed to create account" });
     return;
   }
+  if ((account.status === "connected" || account.status === "warming") && account.smtpPasswordEnc) {
+    await rebalancePendingJobsForActiveCampaigns();
+  }
   res.status(201).json(publicAccount(account));
+});
+
+router.post("/accounts/bulk", async (req, res): Promise<void> => {
+  try {
+    const result = await importEmailAccounts(req.body ?? {});
+    if (result.total === 0) {
+      res.status(400).json({ error: "Upload a CSV with account rows or send an accounts array." });
+      return;
+    }
+    res.status(result.imported > 0 ? 201 : 200).json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Import failed" });
+  }
 });
 
 router.patch("/accounts/:id", async (req, res): Promise<void> => {
@@ -54,7 +104,16 @@ router.patch("/accounts/:id", async (req, res): Promise<void> => {
     return;
   }
   const { smtpPassword, ...rest } = parsed.data as typeof parsed.data & { smtpPassword?: string };
-  const updateValues: Record<string, unknown> = { ...rest };
+  const [existing] = await db.select().from(emailAccountsTable).where(eq(emailAccountsTable.id, params.data.id));
+  if (!existing) {
+    res.status(404).json({ error: "Account not found" });
+    return;
+  }
+  const normalized = normalizeAccountStatus(cleanAccountInput({
+    ...rest,
+    status: rest.warmupEnabled === false && existing.status === "warming" && !rest.status ? "connected" : rest.status,
+  } as Partial<EmailAccount>));
+  const updateValues: Record<string, unknown> = { ...normalized };
   if (smtpPassword) {
     updateValues.smtpPasswordEnc = encryptSecret(smtpPassword);
   }
@@ -62,6 +121,9 @@ router.patch("/accounts/:id", async (req, res): Promise<void> => {
   if (!account) {
     res.status(404).json({ error: "Account not found" });
     return;
+  }
+  if ((account.status === "connected" || account.status === "warming") && account.smtpPasswordEnc) {
+    await rebalancePendingJobsForActiveCampaigns();
   }
   res.json(publicAccount(account));
 });
@@ -73,6 +135,14 @@ router.delete("/accounts/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
+  if (await hasPendingJobsForAccount(params.data.id)) {
+    const reassigned = await reassignPendingJobsForAccount(params.data.id);
+    if (reassigned === 0) {
+      res.status(409).json({ error: "This account has pending campaign sends. Add another sendable account before deleting it." });
+      return;
+    }
+  }
+
   const [account] = await db.delete(emailAccountsTable).where(eq(emailAccountsTable.id, params.data.id)).returning();
   if (!account) {
     res.status(404).json({ error: "Account not found" });

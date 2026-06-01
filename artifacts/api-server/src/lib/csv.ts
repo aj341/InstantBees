@@ -4,6 +4,7 @@ export interface LeadRow {
   lastName?: string;
   company?: string;
   title?: string;
+  roleTitle?: string;
   website?: string;
   phone?: string;
 }
@@ -90,6 +91,8 @@ const HEADER_ALIASES: Record<string, keyof LeadRow> = {
   title: "title",
   jobtitle: "title",
   position: "title",
+  roletitle: "roleTitle",
+  jobrole: "roleTitle",
   website: "website",
   url: "website",
   domain: "website",

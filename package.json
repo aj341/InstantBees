@@ -3,10 +3,15 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "preinstall": "node -e \"const fs=require('fs'); for (const f of ['package-lock.json','yarn.lock']) fs.rmSync(f,{force:true}); if (!/^pnpm\\//.test(process.env.npm_config_user_agent||'')) { console.error('Use pnpm instead'); process.exit(1); }\"",
+    "dev:api": "corepack pnpm --filter @workspace/api-server run dev",
+    "dev:web": "corepack pnpm --filter @workspace/instantly run dev",
+    "dev:mockups": "corepack pnpm --filter @workspace/mockup-sandbox run dev",
+    "build": "corepack pnpm run typecheck && corepack pnpm -r --if-present run build",
+    "railway:build": "corepack pnpm --filter @workspace/instantly run build && corepack pnpm --filter @workspace/api-server run build",
+    "railway:start": "corepack pnpm --filter @workspace/api-server run start",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "corepack pnpm run typecheck:libs && corepack pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
   "devDependencies": {

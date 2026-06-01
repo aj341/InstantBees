@@ -22,6 +22,8 @@ import {
   type Lead,
   type Label,
 } from "@workspace/db";
+import { importEmailAccounts } from "../lib/account-import";
+import { attachmentsJson } from "../lib/email-attachments";
 
 async function attachLabelsToContacts<T extends Pick<Lead, "id">>(contacts: T[]): Promise<(T & { labels: Label[] })[]> {
   if (contacts.length === 0) return [];
@@ -137,6 +139,36 @@ const TOOLS = [
   { name: "pause_campaign", description: "Pause a campaign.", inputSchema: { type: "object", required: ["id"], properties: { id: { type: "number" } } } },
   { name: "stop_campaign", description: "Stop (complete) a campaign.", inputSchema: { type: "object", required: ["id"], properties: { id: { type: "number" } } } },
   { name: "list_mailboxes", description: "List all connected sending mailboxes/accounts and their status.", inputSchema: { type: "object", properties: { limit: { type: "number" }, offset: { type: "number" } } } },
+  {
+    name: "bulk_import_mailboxes",
+    description: "Bulk import sending mailboxes from CSV text or a JSON accounts array. Passwords are encrypted and duplicates are skipped.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        csvText: { type: "string" },
+        defaultProvider: { type: "string", enum: ["gmail", "outlook", "smtp"] },
+        accounts: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              email: { type: "string" },
+              name: { type: "string" },
+              provider: { type: "string", enum: ["gmail", "outlook", "smtp"] },
+              smtpPassword: { type: "string" },
+              warmupEnabled: { type: "boolean" },
+              dailySendLimit: { type: "number" },
+              smtpHost: { type: "string" },
+              smtpPort: { type: "number" },
+              smtpUsername: { type: "string" },
+              imapHost: { type: "string" },
+              imapPort: { type: "number" },
+            },
+          },
+        },
+      },
+    },
+  },
   {
     name: "set_sending_limits",
     description: "Set daily sending limit and warmup toggle for a mailbox.",
@@ -294,7 +326,7 @@ async function dispatch(name: string, a: Record<string, unknown>): Promise<unkno
 
   // ── Templates ──────────────────────────────────────────────────────────
   if (name === "create_template") {
-    const [row] = await db.insert(emailTemplatesTable).values({ name: String(a.name), subject: String(a.subject), body: String(a.body), bodyType: String(a.bodyType ?? "text") }).returning();
+    const [row] = await db.insert(emailTemplatesTable).values({ name: String(a.name), subject: String(a.subject), body: String(a.body), bodyType: String(a.bodyType ?? "text"), attachmentsJson: attachmentsJson(a.attachments) }).returning();
     return row;
   }
   if (name === "list_templates") {
@@ -315,6 +347,7 @@ async function dispatch(name: string, a: Record<string, unknown>): Promise<unkno
     if (a.subject !== undefined) update.subject = a.subject;
     if (a.body !== undefined) update.body = a.body;
     if (a.bodyType !== undefined) update.bodyType = a.bodyType;
+    if (a.attachments !== undefined) update.attachmentsJson = attachmentsJson(a.attachments);
     const [row] = await db.update(emailTemplatesTable).set(update).where(eq(emailTemplatesTable.id, id)).returning();
     if (!row) throw new Error("Template not found");
     return row;
@@ -357,12 +390,12 @@ async function dispatch(name: string, a: Record<string, unknown>): Promise<unkno
   if (name === "set_sequence_steps") {
     const cid = Number(a.campaignId);
     await db.delete(sequenceStepsTable).where(eq(sequenceStepsTable.campaignId, cid));
-    const steps = (a.steps ?? []) as { subject: string; body: string; bodyType?: string; delayDays?: number }[];
+    const steps = (a.steps ?? []) as { subject: string; body: string; bodyType?: string; delayDays?: number; attachments?: unknown }[];
     const created = [];
     for (let i = 0; i < steps.length; i++) {
       const s = steps[i];
       if (!s.subject || !s.body) continue;
-      const [row] = await db.insert(sequenceStepsTable).values({ campaignId: cid, stepNumber: i + 1, subject: s.subject, body: s.body, bodyType: s.bodyType ?? "text", delayDays: s.delayDays ?? 0 }).returning();
+      const [row] = await db.insert(sequenceStepsTable).values({ campaignId: cid, stepNumber: i + 1, subject: s.subject, body: s.body, bodyType: s.bodyType ?? "text", attachmentsJson: attachmentsJson(s.attachments), delayDays: s.delayDays ?? 0 }).returning();
       created.push(row);
     }
     return { created: created.length, steps: created, message: `Set ${created.length} sequence step(s) on campaign ${cid}.` };
@@ -389,6 +422,9 @@ async function dispatch(name: string, a: Record<string, unknown>): Promise<unkno
     const offset = Number(a.offset ?? 0);
     const all = await db.select().from(emailAccountsTable).orderBy(emailAccountsTable.createdAt);
     return { data: all.slice(offset, offset + limit), total: all.length };
+  }
+  if (name === "bulk_import_mailboxes") {
+    return importEmailAccounts(a);
   }
   if (name === "set_sending_limits") {
     const id = Number(a.id);

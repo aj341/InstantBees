@@ -11,11 +11,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, MoreHorizontal, Trash2, Search, Users, Upload, FileText, CheckCircle2, Tag, X, Filter, Settings2 } from "lucide-react";
@@ -69,6 +71,7 @@ export default function Leads() {
   const [csvText, setCsvText] = useState("");
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; total: number } | null>(null);
   const [selectedFilterLabels, setSelectedFilterLabels] = useState<number[]>([]);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
   const [newLeadLabels, setNewLeadLabels] = useState<number[]>([]);
   const [importLabels, setImportLabels] = useState<number[]>([]);
   const [manageLabelsOpen, setManageLabelsOpen] = useState(false);
@@ -88,7 +91,11 @@ export default function Leads() {
     mutation: {
       onSuccess: async (lead) => {
         if (newLeadLabels.length > 0 && lead && typeof lead.id === "number") {
-          await setLeadLabels.mutateAsync({ id: lead.id, data: { labelIds: newLeadLabels } });
+          try {
+            await setLeadLabels.mutateAsync({ id: lead.id, data: { labelIds: newLeadLabels } });
+          } catch {
+            toast({ title: "Lead added, but labels were not applied", variant: "destructive" });
+          }
         }
         toast({ title: "Lead added" });
         invalidateLeads();
@@ -96,7 +103,11 @@ export default function Leads() {
         setNewLeadLabels([]);
         form.reset();
       },
-      onError: () => toast({ title: "Failed to add lead", variant: "destructive" }),
+      onError: (err: Error) => toast({
+        title: "Failed to add lead",
+        description: err.message,
+        variant: "destructive",
+      }),
     },
   });
 
@@ -106,7 +117,11 @@ export default function Leads() {
         invalidateLeads();
         setImportResult(result);
       },
-      onError: () => toast({ title: "Import failed", variant: "destructive" }),
+      onError: (err: Error) => toast({
+        title: "Import failed",
+        description: err.message,
+        variant: "destructive",
+      }),
     },
   });
 
@@ -209,6 +224,57 @@ export default function Leads() {
     });
   }, [leads, search, selectedFilterLabels]);
 
+  const selectedIdSet = useMemo(() => new Set(selectedLeadIds), [selectedLeadIds]);
+  const visibleLeadIds = useMemo(() => filtered.map((lead) => lead.id).filter((id): id is number => typeof id === "number"), [filtered]);
+  const visibleSelectedCount = visibleLeadIds.filter((id) => selectedIdSet.has(id)).length;
+  const allVisibleSelected = visibleLeadIds.length > 0 && visibleSelectedCount === visibleLeadIds.length;
+  const selectedLeads = useMemo(() => {
+    const ids = new Set(selectedLeadIds);
+    return (leads ?? []).filter((lead) => ids.has(lead.id));
+  }, [leads, selectedLeadIds]);
+
+  function toggleLeadSelection(leadId: number, checked: boolean) {
+    setSelectedLeadIds((current) => checked
+      ? Array.from(new Set([...current, leadId]))
+      : current.filter((id) => id !== leadId));
+  }
+
+  function toggleSelectVisible(checked: boolean) {
+    setSelectedLeadIds((current) => {
+      const currentSet = new Set(current);
+      if (checked) {
+        visibleLeadIds.forEach((id) => currentSet.add(id));
+      } else {
+        visibleLeadIds.forEach((id) => currentSet.delete(id));
+      }
+      return Array.from(currentSet);
+    });
+  }
+
+  async function bulkChangeLabel(labelId: number, action: "add" | "remove") {
+    if (selectedLeads.length === 0) return;
+    try {
+      await Promise.all(selectedLeads.map((lead) => {
+        const currentIds = ((lead.labels ?? []) as LabelLite[]).map((label) => label.id);
+        const nextIds = action === "add"
+          ? Array.from(new Set([...currentIds, labelId]))
+          : currentIds.filter((id) => id !== labelId);
+        return setLeadLabels.mutateAsync({ id: lead.id, data: { labelIds: nextIds } });
+      }));
+      toast({
+        title: action === "add" ? "Label added" : "Label removed",
+        description: `${selectedLeads.length} lead${selectedLeads.length === 1 ? "" : "s"} updated.`,
+      });
+      invalidateLeads();
+    } catch (err) {
+      toast({
+        title: "Bulk label update failed",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
+  }
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
@@ -277,10 +343,69 @@ export default function Leads() {
         </DropdownMenu>
       </div>
 
+      {selectedLeadIds.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2">
+          <div className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{selectedLeadIds.length}</span> selected
+            {visibleSelectedCount > 0 && visibleSelectedCount !== selectedLeadIds.length ? `, ${visibleSelectedCount} visible` : ""}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" disabled={!labels?.length || setLeadLabels.isPending} data-testid="button-bulk-add-label">
+                  <Tag className="mr-2 h-4 w-4" /> Add label
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Add to selected leads</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {labels?.map((lbl) => (
+                  <DropdownMenuItem key={lbl.id} onClick={() => bulkChangeLabel(lbl.id, "add")} data-testid={`bulk-add-label-${lbl.id}`}>
+                    <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: lbl.color ?? "#06b6d4" }} />
+                    {lbl.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" disabled={!labels?.length || setLeadLabels.isPending} data-testid="button-bulk-remove-label">
+                  <X className="mr-2 h-4 w-4" /> Remove label
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Remove from selected leads</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {labels?.map((lbl) => (
+                  <DropdownMenuItem key={lbl.id} onClick={() => bulkChangeLabel(lbl.id, "remove")} data-testid={`bulk-remove-label-${lbl.id}`}>
+                    <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: lbl.color ?? "#06b6d4" }} />
+                    {lbl.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button size="sm" variant="ghost" onClick={() => setSelectedLeadIds([])} data-testid="button-clear-lead-selection">
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-md border border-border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={allVisibleSelected || (visibleSelectedCount > 0 && "indeterminate")}
+                  disabled={visibleLeadIds.length === 0}
+                  onCheckedChange={(checked) => toggleSelectVisible(checked === true)}
+                  aria-label="Select all visible leads"
+                  data-testid="checkbox-select-all-leads"
+                />
+              </TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Company</TableHead>
@@ -291,10 +416,10 @@ export default function Leads() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading leads...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading leads...</TableCell></TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-16">
+                <TableCell colSpan={7} className="py-16">
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <Users className="h-8 w-8 opacity-40" />
                     <span className="text-sm">{search || selectedFilterLabels.length > 0 ? "No leads match your filters" : "No leads yet. Add your first lead to get started."}</span>
@@ -311,12 +436,26 @@ export default function Leads() {
                   className="cursor-pointer"
                   onClick={() => setSelectedLead(lead as Lead)}
                 >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedIdSet.has(lead.id)}
+                      onCheckedChange={(checked) => toggleLeadSelection(lead.id, checked === true)}
+                      aria-label={`Select ${lead.email}`}
+                      data-testid={`checkbox-select-lead-${lead.id}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{lead.email}</TableCell>
                   <TableCell>{[lead.firstName, lead.lastName].filter(Boolean).join(" ") || "—"}</TableCell>
                   <TableCell>{lead.company || "—"}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap items-center gap-1">
-                      {leadLabels.map(lbl => <LabelChip key={lbl.id} label={lbl} />)}
+                      {leadLabels.map(lbl => (
+                        <LabelChip
+                          key={lbl.id}
+                          label={lbl}
+                          onRemove={() => toggleLabelOnLead(lead.id, leadLabelIds, lbl.id)}
+                        />
+                      ))}
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" data-testid={`button-edit-labels-${lead.id}`}>
@@ -422,7 +561,7 @@ export default function Leads() {
 
               {labels && labels.length > 0 && (
                 <div className="space-y-2">
-                  <FormLabel>Labels</FormLabel>
+                  <Label>Labels</Label>
                   <div className="flex flex-wrap gap-1.5">
                     {labels.map(lbl => {
                       const selected = newLeadLabels.includes(lbl.id);
@@ -448,6 +587,11 @@ export default function Leads() {
                       );
                     })}
                   </div>
+                </div>
+              )}
+              {(!labels || labels.length === 0) && (
+                <div className="rounded-md border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+                  Create a label from <span className="font-medium text-foreground">Manage Labels</span> first, then you can apply it to this whole CSV import.
                 </div>
               )}
 
@@ -594,7 +738,7 @@ export default function Leads() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <FormLabel>New label</FormLabel>
+              <Label>New label</Label>
               <div className="flex gap-2">
                 <Input
                   placeholder="Label name (e.g. VIP, Q1 launch)"

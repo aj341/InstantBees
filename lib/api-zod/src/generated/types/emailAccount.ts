@@ -26,6 +26,10 @@ export interface EmailAccount {
   smtpPort?: number | null;
   /** @nullable */
   smtpUsername?: string | null;
+  /** @nullable */
+  imapHost?: string | null;
+  /** @nullable */
+  imapPort?: number | null;
   hasSmtpPassword?: boolean;
   /** @nullable */
   lastError?: string | null;

@@ -1,19 +1,19 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const leadListsTable = pgTable("lead_lists", {
-  id: serial("id").primaryKey(),
+export const leadListsTable = sqliteTable("lead_lists", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   description: text("description"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
-export const listLeadsTable = pgTable("list_leads", {
-  id: serial("id").primaryKey(),
+export const listLeadsTable = sqliteTable("list_leads", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   listId: integer("list_id").notNull(),
   leadId: integer("lead_id").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
 export const insertLeadListSchema = createInsertSchema(leadListsTable).omit({ id: true, createdAt: true });

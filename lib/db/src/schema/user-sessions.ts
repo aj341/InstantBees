@@ -1,14 +1,11 @@
-import { pgTable, varchar, json, timestamp, index } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 
-// This table is created and managed at runtime by connect-pg-simple. It is
-// declared here only so drizzle-kit push leaves it alone instead of trying
-// to drop it on every migration.
-export const userSessionsTable = pgTable(
+export const userSessionsTable = sqliteTable(
   "user_sessions",
   {
-    sid: varchar("sid").primaryKey().notNull(),
-    sess: json("sess").notNull(),
-    expire: timestamp("expire", { precision: 6, mode: "date" }).notNull(),
+    sid: text("sid").primaryKey().notNull(),
+    sess: text("sess", { mode: "json" }).notNull(),
+    expire: integer("expire", { mode: "timestamp_ms" }).notNull(),
   },
   (t) => ({
     expireIdx: index("IDX_user_sessions_expire").on(t.expire),

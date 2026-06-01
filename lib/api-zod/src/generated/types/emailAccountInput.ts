@@ -16,6 +16,8 @@ export interface EmailAccountInput {
   smtpHost?: string;
   smtpPort?: number;
   smtpUsername?: string;
+  imapHost?: string;
+  imapPort?: number;
   /** SMTP password or app password. Stored encrypted; never returned. */
   smtpPassword?: string;
 }

@@ -37,4 +37,4 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
-CLAUDE_API_KEY = "9f43388acfe0b7ee260b8466e7a75a132b20cd417b024865ec692859de9f6ef7"
+CLAUDE_API_KEY = "replace-with-your-api-key"

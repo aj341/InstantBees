@@ -296,6 +296,48 @@ paths:
 
   # ── Sequence Steps ────────────────────────────────────────────────────────────
 
+  /campaigns/{id}/opens:
+    get:
+      operationId: getCampaignOpens
+      tags: [campaigns]
+      summary: Opened lead breakdown for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Leads that opened or otherwise engaged with the campaign email
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CampaignOpenRow"
+
+  /campaigns/{id}/replies:
+    get:
+      operationId: getCampaignReplies
+      tags: [campaigns]
+      summary: Replied lead breakdown for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Leads that replied to the campaign
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CampaignReplyRow"
+
   /campaigns/{id}/sequences:
     get:
       operationId: listSequences
@@ -664,6 +706,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/EmailAccount"
 
+  /accounts/bulk:
+    post:
+      operationId: bulkImportAccounts
+      tags: [accounts]
+      summary: Import multiple email accounts from CSV text or JSON rows
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailAccountBulkImportInput"
+      responses:
+        "201":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailAccountBulkImportResult"
+        "200":
+          description: Import completed with only skipped rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailAccountBulkImportResult"
+
   /accounts/{id}/test:
     post:
       operationId: testAccount
@@ -1027,6 +1094,61 @@ components:
         lastClickedAt:
           type: ["string", "null"]
           format: date-time
+        clicks:
+          type: array
+          items:
+            type: object
+            required: [leadId, email, name, company, clickedAt]
+            properties:
+              leadId:
+                type: integer
+              email:
+                type: ["string", "null"]
+              name:
+                type: ["string", "null"]
+              company:
+                type: ["string", "null"]
+              clickedAt:
+                type: ["string", "null"]
+                format: date-time
+
+    CampaignOpenRow:
+      type: object
+      required: [leadId, email, name, company, openedAt, source]
+      properties:
+        leadId:
+          type: integer
+        email:
+          type: ["string", "null"]
+        name:
+          type: ["string", "null"]
+        company:
+          type: ["string", "null"]
+        openedAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+
+    CampaignReplyRow:
+      type: object
+      required: [leadId, email, name, company, repliedAt, subject, body]
+      properties:
+        leadId:
+          type: integer
+        email:
+          type: ["string", "null"]
+        name:
+          type: ["string", "null"]
+        company:
+          type: ["string", "null"]
+        repliedAt:
+          type: ["string", "null"]
+          format: date-time
+        subject:
+          type: ["string", "null"]
+        body:
+          type: ["string", "null"]
 
     CampaignStatsOverview:
       type: object
@@ -1060,6 +1182,8 @@ components:
         opened:
           type: integer
         clicked:
+          type: integer
+        uniqueClickedLeads:
           type: integer
         replied:
           type: integer
@@ -1369,6 +1493,10 @@ components:
           type: ["integer", "null"]
         smtpUsername:
           type: ["string", "null"]
+        imapHost:
+          type: ["string", "null"]
+        imapPort:
+          type: ["integer", "null"]
         hasSmtpPassword:
           type: boolean
         lastError:
@@ -1397,6 +1525,10 @@ components:
           type: integer
         smtpUsername:
           type: string
+        imapHost:
+          type: string
+        imapPort:
+          type: integer
         smtpPassword:
           type: string
           description: SMTP password or app password. Stored encrypted; never returned.
@@ -1419,8 +1551,80 @@ components:
           type: integer
         smtpUsername:
           type: string
+        imapHost:
+          type: string
+        imapPort:
+          type: integer
         smtpPassword:
           type: string
+
+    EmailAccountBulkImportInput:
+      type: object
+      properties:
+        csvText:
+          type: string
+          description: CSV text with headers such as email, name, provider, smtpPassword, warmupEnabled, dailySendLimit, smtpHost, smtpPort, smtpUsername, imapHost, imapPort.
+        defaultProvider:
+          type: string
+          enum: [gmail, outlook, smtp]
+        accounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAccountBulkImportRow"
+
+    EmailAccountBulkImportRow:
+      type: object
+      properties:
+        email:
+          type: string
+        name:
+          type: string
+        provider:
+          type: string
+          enum: [gmail, outlook, smtp]
+        warmupEnabled:
+          type: boolean
+        dailySendLimit:
+          type: integer
+        smtpHost:
+          type: string
+        smtpPort:
+          type: integer
+        smtpUsername:
+          type: string
+        smtpPassword:
+          type: string
+        imapHost:
+          type: string
+        imapPort:
+          type: integer
+
+    EmailAccountBulkImportResult:
+      type: object
+      required: [total, imported, skipped, accountIds, errors]
+      properties:
+        total:
+          type: integer
+        imported:
+          type: integer
+        skipped:
+          type: integer
+        accountIds:
+          type: array
+          items:
+            type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            required: [row, reason]
+            properties:
+              row:
+                type: integer
+              email:
+                type: string
+              reason:
+                type: string
 
     SendTestStepInput:
       type: object
@@ -1563,6 +1767,21 @@ components:
         activeAccounts:
           type: integer
         activeCampaigns:
+          type: integer
+        totalCampaigns:
+          type: integer
+        activeCampaignNames:
+          type: array
+          items:
+            type: string
+        publicBaseUrl:
+          type: string
+        publicTrackingUrl:
+          type: boolean
+        lastInboxPollAt:
+          type: ["string", "null"]
+          format: date-time
+        inboxPollingErrors:
           type: integer
 
     DailyStats:

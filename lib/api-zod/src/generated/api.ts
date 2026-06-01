@@ -27,6 +27,8 @@ export const ListCampaignsResponseItem = zod.object({
   "fromName": zod.string().nullish(),
   "replyTo": zod.string().nullish(),
   "dailyLimit": zod.number().nullish(),
+  "batchSize": zod.number().optional(),
+  "batchIntervalMinutes": zod.number().optional(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
   "includeUnsubscribe": zod.boolean().optional(),
@@ -50,6 +52,12 @@ export const CreateCampaignBody = zod.object({
   "fromName": zod.string().optional(),
   "replyTo": zod.string().optional(),
   "dailyLimit": zod.number().optional(),
+  "batchSize": zod.number().optional(),
+  "batchIntervalMinutes": zod.number().optional(),
+  "sendWindowStart": zod.string().optional(),
+  "sendWindowEnd": zod.string().optional(),
+  "sendWindowTimezone": zod.string().optional(),
+  "sendWindowDays": zod.string().optional(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
   "includeUnsubscribe": zod.boolean().optional(),
@@ -86,6 +94,12 @@ export const GetCampaignResponse = zod.object({
   "fromName": zod.string().nullish(),
   "replyTo": zod.string().nullish(),
   "dailyLimit": zod.number().nullish(),
+  "batchSize": zod.number().optional(),
+  "batchIntervalMinutes": zod.number().optional(),
+  "sendWindowStart": zod.string().optional(),
+  "sendWindowEnd": zod.string().optional(),
+  "sendWindowTimezone": zod.string().optional(),
+  "sendWindowDays": zod.string().optional(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
   "includeUnsubscribe": zod.boolean().optional(),
@@ -112,6 +126,12 @@ export const UpdateCampaignBody = zod.object({
   "fromName": zod.string().optional(),
   "replyTo": zod.string().optional(),
   "dailyLimit": zod.number().optional(),
+  "batchSize": zod.number().optional(),
+  "batchIntervalMinutes": zod.number().optional(),
+  "sendWindowStart": zod.string().optional(),
+  "sendWindowEnd": zod.string().optional(),
+  "sendWindowTimezone": zod.string().optional(),
+  "sendWindowDays": zod.string().optional(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
   "includeUnsubscribe": zod.boolean().optional(),
@@ -125,6 +145,8 @@ export const UpdateCampaignResponse = zod.object({
   "fromName": zod.string().nullish(),
   "replyTo": zod.string().nullish(),
   "dailyLimit": zod.number().nullish(),
+  "batchSize": zod.number().optional(),
+  "batchIntervalMinutes": zod.number().optional(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
   "includeUnsubscribe": zod.boolean().optional(),
@@ -161,6 +183,8 @@ export const LaunchCampaignResponse = zod.object({
   "fromName": zod.string().nullish(),
   "replyTo": zod.string().nullish(),
   "dailyLimit": zod.number().nullish(),
+  "batchSize": zod.number().optional(),
+  "batchIntervalMinutes": zod.number().optional(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
   "includeUnsubscribe": zod.boolean().optional(),
@@ -189,6 +213,8 @@ export const PauseCampaignResponse = zod.object({
   "fromName": zod.string().nullish(),
   "replyTo": zod.string().nullish(),
   "dailyLimit": zod.number().nullish(),
+  "batchSize": zod.number().optional(),
+  "batchIntervalMinutes": zod.number().optional(),
   "trackOpens": zod.boolean().optional(),
   "trackClicks": zod.boolean().optional(),
   "includeUnsubscribe": zod.boolean().optional(),
@@ -215,6 +241,7 @@ export const GetCampaignAnalyticsResponse = zod.object({
   "sent": zod.number(),
   "opened": zod.number(),
   "clicked": zod.number(),
+  "uniqueClickedLeads": zod.number().optional(),
   "replied": zod.number(),
   "bounced": zod.number(),
   "openRate": zod.number(),
@@ -295,9 +322,53 @@ export const GetCampaignLinkClicksResponseItem = zod.object({
   "url": zod.string(),
   "totalClicks": zod.number(),
   "uniqueClicks": zod.number(),
-  "lastClickedAt": zod.coerce.date().nullable()
+  "lastClickedAt": zod.coerce.date().nullable(),
+  "clicks": zod.array(zod.object({
+    "leadId": zod.number(),
+    "email": zod.string().nullable(),
+    "name": zod.string().nullable(),
+    "company": zod.string().nullable(),
+    "clickedAt": zod.coerce.date().nullable()
+  })).optional()
 })
 export const GetCampaignLinkClicksResponse = zod.array(GetCampaignLinkClicksResponseItem)
+
+
+/**
+ * @summary Opened lead breakdown for a campaign
+ */
+export const GetCampaignOpensParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignOpensResponseItem = zod.object({
+  "leadId": zod.number(),
+  "email": zod.string().nullable(),
+  "name": zod.string().nullable(),
+  "company": zod.string().nullable(),
+  "openedAt": zod.string(),
+  "source": zod.string()
+})
+export const GetCampaignOpensResponse = zod.array(GetCampaignOpensResponseItem)
+
+
+/**
+ * @summary Replied lead breakdown for a campaign
+ */
+export const GetCampaignRepliesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignRepliesResponseItem = zod.object({
+  "leadId": zod.number(),
+  "email": zod.string().nullable(),
+  "name": zod.string().nullable(),
+  "company": zod.string().nullable(),
+  "repliedAt": zod.string().nullable(),
+  "subject": zod.string().nullable(),
+  "body": zod.string().nullable()
+})
+export const GetCampaignRepliesResponse = zod.array(GetCampaignRepliesResponseItem)
 
 
 /**
@@ -427,6 +498,7 @@ export const CreateLeadBody = zod.object({
   "lastName": zod.string().optional(),
   "company": zod.string().optional(),
   "title": zod.string().optional(),
+  "roleTitle": zod.string().optional(),
   "website": zod.string().optional(),
   "phone": zod.string().optional()
 })
@@ -470,10 +542,11 @@ export const BulkImportLeadsBody = zod.object({
   "lastName": zod.string().optional(),
   "company": zod.string().optional(),
   "title": zod.string().optional(),
+  "roleTitle": zod.string().optional(),
   "website": zod.string().optional(),
   "phone": zod.string().optional()
 })).optional().describe('Array of lead objects. Pass `csvText` instead if importing CSV.'),
-  "csvText": zod.string().optional().describe('Raw CSV text with an `email` column plus any of firstName, lastName, company, title, website, phone.'),
+  "csvText": zod.string().optional().describe('Raw CSV text with an `email` column plus any of firstName, lastName, company, title, roleTitle/role_title, website, phone.'),
   "campaignId": zod.number().optional().describe('Optionally add all imported leads to this campaign'),
   "labelIds": zod.array(zod.number()).optional().describe('Optionally apply these labels to all imported leads')
 }).describe('Provide either `leads` (array) or `csvText` (string). At least one must be present.')
@@ -499,6 +572,7 @@ export const UpdateLeadBody = zod.object({
   "lastName": zod.string().optional(),
   "company": zod.string().optional(),
   "title": zod.string().optional(),
+  "roleTitle": zod.string().optional(),
   "website": zod.string().optional(),
   "phone": zod.string().optional(),
   "status": zod.enum(['active', 'unsubscribed', 'bounced', 'replied']).optional()
@@ -511,6 +585,7 @@ export const UpdateLeadResponse = zod.object({
   "lastName": zod.string().nullish(),
   "company": zod.string().nullish(),
   "title": zod.string().nullish(),
+  "roleTitle": zod.string().nullish(),
   "website": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "status": zod.enum(['active', 'unsubscribed', 'bounced', 'replied']).optional(),
@@ -631,10 +706,13 @@ export const ListAccountsResponseItem = zod.object({
   "warmupEnabled": zod.boolean(),
   "dailySendLimit": zod.number(),
   "sentToday": zod.number().optional(),
+  "sentTodayDate": zod.string().nullish(),
   "healthScore": zod.number().nullish(),
   "smtpHost": zod.string().nullish(),
   "smtpPort": zod.number().nullish(),
   "smtpUsername": zod.string().nullish(),
+  "imapHost": zod.string().nullish(),
+  "imapPort": zod.number().nullish(),
   "hasSmtpPassword": zod.boolean().optional(),
   "lastError": zod.string().nullish(),
   "createdAt": zod.string()
@@ -654,6 +732,8 @@ export const CreateAccountBody = zod.object({
   "smtpHost": zod.string().optional(),
   "smtpPort": zod.number().optional(),
   "smtpUsername": zod.string().optional(),
+  "imapHost": zod.string().optional(),
+  "imapPort": zod.number().optional(),
   "smtpPassword": zod.string().optional().describe('SMTP password or app password. Stored encrypted; never returned.')
 })
 
@@ -679,13 +759,17 @@ export const UpdateAccountParams = zod.object({
 })
 
 export const UpdateAccountBody = zod.object({
+  "email": zod.string().optional(),
   "name": zod.string().optional(),
+  "provider": zod.enum(['gmail', 'outlook', 'smtp']).optional(),
   "warmupEnabled": zod.boolean().optional(),
   "dailySendLimit": zod.number().optional(),
   "status": zod.enum(['connected', 'disconnected', 'error', 'warming']).optional(),
   "smtpHost": zod.string().optional(),
   "smtpPort": zod.number().optional(),
   "smtpUsername": zod.string().optional(),
+  "imapHost": zod.string().optional(),
+  "imapPort": zod.number().optional(),
   "smtpPassword": zod.string().optional()
 })
 
@@ -702,6 +786,8 @@ export const UpdateAccountResponse = zod.object({
   "smtpHost": zod.string().nullish(),
   "smtpPort": zod.number().nullish(),
   "smtpUsername": zod.string().nullish(),
+  "imapHost": zod.string().nullish(),
+  "imapPort": zod.number().nullish(),
   "hasSmtpPassword": zod.boolean().optional(),
   "lastError": zod.string().nullish(),
   "createdAt": zod.string()
@@ -881,7 +967,13 @@ export const GetAnalyticsSummaryResponse = zod.object({
   "replyRate": zod.number(),
   "bounceRate": zod.number(),
   "activeAccounts": zod.number(),
-  "activeCampaigns": zod.number()
+  "activeCampaigns": zod.number(),
+  "totalCampaigns": zod.number().optional(),
+  "activeCampaignNames": zod.array(zod.string()).optional(),
+  "publicBaseUrl": zod.string().optional(),
+  "publicTrackingUrl": zod.boolean().optional(),
+  "lastInboxPollAt": zod.string().nullable().optional(),
+  "inboxPollingErrors": zod.number().optional()
 })
 
 
@@ -896,5 +988,3 @@ export const GetDailyAnalyticsResponseItem = zod.object({
   "bounced": zod.number()
 })
 export const GetDailyAnalyticsResponse = zod.array(GetDailyAnalyticsResponseItem)
-
-

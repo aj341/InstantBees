@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, sequenceStepsTable, emailAccountsTable } from "@workspace/db";
+import { db, sequenceStepsTable, sequenceStepVariantsTable, emailAccountsTable } from "@workspace/db";
 import {
   CreateSequenceBody,
   CreateSequenceParams,
@@ -12,6 +12,7 @@ import {
   SendTestStepParams,
 } from "@workspace/api-zod";
 import { sendEmail, renderMergeFields } from "../lib/mailer";
+import { attachmentsJson } from "../lib/email-attachments";
 
 const router: IRouter = Router();
 
@@ -27,7 +28,8 @@ router.get("/campaigns/:id/sequences", async (req, res): Promise<void> => {
     .from(sequenceStepsTable)
     .where(eq(sequenceStepsTable.campaignId, params.data.id))
     .orderBy(sequenceStepsTable.stepNumber);
-  res.json(steps);
+  const variants = await db.select().from(sequenceStepVariantsTable);
+  res.json(steps.map((step) => ({ ...step, variants: variants.filter((variant) => variant.stepId === step.id) })));
 });
 
 router.post("/campaigns/:id/sequences", async (req, res): Promise<void> => {
@@ -49,7 +51,7 @@ router.post("/campaigns/:id/sequences", async (req, res): Promise<void> => {
   const stepNumber = existing.length + 1;
   const [step] = await db
     .insert(sequenceStepsTable)
-    .values({ ...parsed.data, campaignId: params.data.id, stepNumber })
+    .values({ ...parsed.data, attachmentsJson: attachmentsJson((req.body as { attachments?: unknown }).attachments), campaignId: params.data.id, stepNumber })
     .returning();
   res.status(201).json(step);
 });
@@ -127,6 +129,7 @@ router.post("/campaigns/:id/sequences/:stepId/test", async (req, res): Promise<v
       previewText,
       body: renderedBody,
       bodyType: step.bodyType,
+      attachmentsJson: step.attachmentsJson,
     });
     res.json({ ok: true });
   } catch (err) {
@@ -143,6 +146,7 @@ router.delete("/campaigns/:id/sequences/:stepId", async (req, res): Promise<void
     res.status(400).json({ error: params.error.message });
     return;
   }
+  await db.delete(sequenceStepVariantsTable).where(eq(sequenceStepVariantsTable.stepId, params.data.stepId));
   const [step] = await db
     .delete(sequenceStepsTable)
     .where(and(eq(sequenceStepsTable.id, params.data.stepId), eq(sequenceStepsTable.campaignId, params.data.id)))

@@ -11,6 +11,7 @@ export interface CampaignAnalytics {
   sent: number;
   opened: number;
   clicked: number;
+  uniqueClickedLeads?: number;
   replied: number;
   bounced: number;
   openRate: number;
