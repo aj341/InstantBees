@@ -60,7 +60,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type, FileText, Send, Braces, MousePointerClick, Clock, AlertTriangle, CheckCircle2, CalendarClock, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Play, Pause, Plus, Trash2, Pencil, UserPlus, Mail, TrendingUp, MessageSquare, Users, Code2, AlignLeft, Type, FileText, Send, Braces, MousePointerClick, Clock, AlertTriangle, CheckCircle2, CalendarClock, ShieldCheck } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/email-editor/rich-text-editor";
@@ -177,6 +177,7 @@ export default function CampaignDetail() {
   const [batchSizeInput, setBatchSizeInput] = useState("25");
   const [batchIntervalInput, setBatchIntervalInput] = useState("60");
   const [activeTab, setActiveTab] = useState("overview");
+  const [sequencePreviewIndex, setSequencePreviewIndex] = useState(0);
 
   const { data: templates } = useListTemplates({ query: { queryKey: getListTemplatesQueryKey() } });
   const { data: accounts } = useListAccounts({ query: { queryKey: getListAccountsQueryKey() } });
@@ -239,6 +240,10 @@ export default function CampaignDetail() {
     setBatchSizeInput(String(campaign.batchSize ?? 25));
     setBatchIntervalInput(String(campaign.batchIntervalMinutes ?? 60));
   }, [campaign]);
+
+  useEffect(() => {
+    setSequencePreviewIndex((current) => Math.min(current, Math.max(0, (steps?.length ?? 1) - 1)));
+  }, [steps?.length]);
 
   const launch = useLaunchCampaign({
     mutation: {
@@ -448,9 +453,17 @@ export default function CampaignDetail() {
   const launchReadyCount = launchChecklist.filter((item) => item.ok).length;
   const slotMinutes = Number((((campaign.batchIntervalMinutes ?? 60) / Math.max(1, campaign.batchSize ?? 25))).toFixed(1));
   const campaignWindow = campaign as typeof campaign & { sendWindowStart?: string | null; sendWindowEnd?: string | null };
+  const sequencePreviewSteps = (steps ?? []).map((step, index) => {
+    const stepNumber = index + 1;
+    const sentLeadCount = campaignLeadsWithProgress.filter((lead) => (lead.sequenceProgress?.sentSteps ?? 0) >= stepNumber).length;
+    const queuedLeadCount = campaignLeadsWithProgress.filter((lead) => lead.sequenceProgress?.nextStepNumber === stepNumber).length;
+    const activeLeadCount = campaignLeadsWithProgress.filter((lead) => lead.sequenceProgress?.currentStepNumber === stepNumber).length;
+    return { ...step, stepNumber, sentLeadCount, queuedLeadCount, activeLeadCount };
+  });
+  const activePreviewStep = sequencePreviewSteps[sequencePreviewIndex] ?? sequencePreviewSteps[0];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-8 max-w-[1500px] mx-auto space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <Link href="/campaigns">
@@ -634,6 +647,166 @@ export default function CampaignDetail() {
               </Card>
             ))}
           </div>
+
+          <Card className="overflow-hidden">
+            <CardHeader className="border-b border-border bg-muted/20">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Mail className="h-5 w-5 text-primary" />
+                    Sequence Preview & Progress
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    A full-width view of each email in the campaign and where leads are currently sitting.
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("sequence")}>
+                  Edit sequence
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {sequencePreviewSteps.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
+                  <Mail className="h-8 w-8 opacity-30" />
+                  <p className="text-sm">No sequence steps yet. Add the first email to preview the campaign.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex gap-3 overflow-x-auto pb-2">
+                    {sequencePreviewSteps.map((step, index) => (
+                      <button
+                        key={step.id}
+                        type="button"
+                        onClick={() => setSequencePreviewIndex(index)}
+                        className={`min-w-[280px] rounded-lg border bg-card p-4 text-left transition-colors ${
+                          sequencePreviewIndex === index
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/50 hover:bg-accent/30"
+                        }`}
+                        data-testid={`button-sequence-preview-step-${step.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Step {step.stepNumber}</p>
+                            <p className="mt-1 line-clamp-2 font-semibold">{step.subject}</p>
+                          </div>
+                          <Badge variant={step.queuedLeadCount > 0 ? "default" : "secondary"}>
+                            {step.queuedLeadCount > 0 ? "Next up" : "Ready"}
+                          </Badge>
+                        </div>
+                        <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+                          <div className="rounded-md bg-muted/40 p-2">
+                            <div className="text-base font-bold">{step.sentLeadCount}</div>
+                            <div className="text-muted-foreground">sent</div>
+                          </div>
+                          <div className="rounded-md bg-muted/40 p-2">
+                            <div className="text-base font-bold">{step.queuedLeadCount}</div>
+                            <div className="text-muted-foreground">queued</div>
+                          </div>
+                          <div className="rounded-md bg-muted/40 p-2">
+                            <div className="text-base font-bold">{step.activeLeadCount}</div>
+                            <div className="text-muted-foreground">active</div>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          {index === 0
+                            ? "Day 0: sent when the campaign launches."
+                            : `Delay: ${step.delayDays} day${step.delayDays === 1 ? "" : "s"} after step ${index}.`}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {activePreviewStep && (
+                    <div className="overflow-hidden rounded-lg border border-border bg-card">
+                      <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_360px]">
+                        <div className="min-w-0">
+                        <div className="border-b border-border bg-muted/30 px-4 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                                Email {activePreviewStep.stepNumber} of {sequencePreviewSteps.length}
+                              </p>
+                              <p className="truncate font-semibold">{activePreviewStep.subject}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                onClick={() => setSequencePreviewIndex((current) => Math.max(0, current - 1))}
+                                disabled={sequencePreviewIndex === 0}
+                                data-testid="button-sequence-preview-prev"
+                              >
+                                <ChevronLeft className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                onClick={() => setSequencePreviewIndex((current) => Math.min(sequencePreviewSteps.length - 1, current + 1))}
+                                disabled={sequencePreviewIndex >= sequencePreviewSteps.length - 1}
+                                data-testid="button-sequence-preview-next"
+                              >
+                                <ChevronRight className="h-4 w-4" />
+                              </Button>
+                              <Badge variant="outline">{activePreviewStep.bodyType ?? "text"}</Badge>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="h-[620px]">
+                          <EmailPreview
+                            body={activePreviewStep.body}
+                            bodyType={(activePreviewStep.bodyType ?? "text") as "text" | "html"}
+                            subject={activePreviewStep.subject}
+                            previewText={activePreviewStep.previewText ?? undefined}
+                            className="h-full rounded-none border-0"
+                          />
+                        </div>
+                      </div>
+                        <div className="border-t border-border bg-muted/20 p-4 xl:border-l xl:border-t-0">
+                          <p className="text-sm font-semibold">Progress at this step</p>
+                          <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+                            <div className="rounded-md bg-background/70 p-3">
+                              <div className="text-xl font-bold">{activePreviewStep.sentLeadCount}</div>
+                              <div className="text-muted-foreground">sent</div>
+                            </div>
+                            <div className="rounded-md bg-background/70 p-3">
+                              <div className="text-xl font-bold">{activePreviewStep.queuedLeadCount}</div>
+                              <div className="text-muted-foreground">queued</div>
+                            </div>
+                            <div className="rounded-md bg-background/70 p-3">
+                              <div className="text-xl font-bold">{activePreviewStep.activeLeadCount}</div>
+                              <div className="text-muted-foreground">active</div>
+                            </div>
+                          </div>
+                          <div className="mt-4 rounded-md border border-border bg-background/60 p-3 text-sm">
+                            <p className="font-medium">Timing</p>
+                            <p className="mt-1 text-muted-foreground">
+                              {sequencePreviewIndex === 0
+                                ? "Day 0: sent when the campaign launches."
+                                : `${activePreviewStep.delayDays} day${activePreviewStep.delayDays === 1 ? "" : "s"} after the previous email.`}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="mt-4 w-full"
+                            onClick={() => openEdit({ ...activePreviewStep, bodyType: (activePreviewStep.bodyType ?? "text") as "text" | "html" })}
+                            data-testid="button-edit-active-preview-step"
+                          >
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Edit this email
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader><CardTitle>Deliverability Snapshot</CardTitle></CardHeader>

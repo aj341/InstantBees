@@ -30,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Activity, AlertTriangle, ArrowRight, Inbox, Mail, Plus, Rocket, Users } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, CalendarClock, Inbox, Mail, Plus, Rocket, Users } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { toast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -45,6 +45,9 @@ export default function Dashboard() {
   const [resetOpen, setResetOpen] = useState(false);
   const [resetAccounts, setResetAccounts] = useState(false);
   const [resetTemplates, setResetTemplates] = useState(false);
+  const draftCampaigns = (campaigns ?? []).filter((campaign) => campaign.status === "draft");
+  const activeCampaigns = (campaigns ?? []).filter((campaign) => campaign.status === "active");
+  const nextCampaign = draftCampaigns[0] ?? activeCampaigns[0] ?? campaigns?.[0];
 
   const reset = useResetAllData({
     mutation: {
@@ -95,16 +98,42 @@ export default function Dashboard() {
               Launch Next
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            <Link href="/campaigns/new">
-              <Button size="sm"><Plus className="mr-2 h-4 w-4" /> Campaign</Button>
-            </Link>
-            <Link href="/leads">
-              <Button size="sm" variant="outline">Import leads</Button>
-            </Link>
-            <Link href="/growth">
-              <Button size="sm" variant="outline">View capacity</Button>
-            </Link>
+          <CardContent className="space-y-4">
+            {nextCampaign ? (
+              <div className="rounded-md border border-border bg-muted/30 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      {draftCampaigns.length > 0 ? "Next draft to finish" : "Currently sending"}
+                    </p>
+                    <Link href={`/campaigns/${nextCampaign.id}`} className="mt-1 block truncate font-semibold hover:underline">
+                      {nextCampaign.name}
+                    </Link>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {nextCampaign.leadsCount ?? 0} leads · {nextCampaign.sentCount ?? 0} sent · {nextCampaign.replyCount ?? 0} replies
+                    </p>
+                  </div>
+                  <Badge variant={nextCampaign.status === "active" ? "default" : "secondary"}>{nextCampaign.status}</Badge>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+                No campaigns yet. Create one, add sequence steps, then attach leads.
+              </div>
+            )}
+            <div className="grid gap-2 sm:grid-cols-3">
+              <Link href="/campaigns/new">
+                <Button size="sm" className="w-full justify-center"><Plus className="mr-2 h-4 w-4" /> Campaign</Button>
+              </Link>
+              <Link href="/leads">
+                <Button size="sm" variant="outline" className="w-full justify-center">Import leads</Button>
+              </Link>
+              <Link href="/growth">
+                <Button size="sm" variant="outline" className="w-full justify-center">
+                  <CalendarClock className="mr-2 h-4 w-4" /> Capacity
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
         <Card>
