@@ -713,6 +713,7 @@ export const ListAccountsResponseItem = zod.object({
   "smtpUsername": zod.string().nullish(),
   "imapHost": zod.string().nullish(),
   "imapPort": zod.number().nullish(),
+  "signatureHtml": zod.string().nullish(),
   "hasSmtpPassword": zod.boolean().optional(),
   "lastError": zod.string().nullish(),
   "createdAt": zod.string()
@@ -734,6 +735,7 @@ export const CreateAccountBody = zod.object({
   "smtpUsername": zod.string().optional(),
   "imapHost": zod.string().optional(),
   "imapPort": zod.number().optional(),
+  "signatureHtml": zod.string().nullish(),
   "smtpPassword": zod.string().optional().describe('SMTP password or app password. Stored encrypted; never returned.')
 })
 
@@ -770,6 +772,7 @@ export const UpdateAccountBody = zod.object({
   "smtpUsername": zod.string().optional(),
   "imapHost": zod.string().optional(),
   "imapPort": zod.number().optional(),
+  "signatureHtml": zod.string().nullish(),
   "smtpPassword": zod.string().optional()
 })
 
@@ -788,6 +791,7 @@ export const UpdateAccountResponse = zod.object({
   "smtpUsername": zod.string().nullish(),
   "imapHost": zod.string().nullish(),
   "imapPort": zod.number().nullish(),
+  "signatureHtml": zod.string().nullish(),
   "hasSmtpPassword": zod.boolean().optional(),
   "lastError": zod.string().nullish(),
   "createdAt": zod.string()

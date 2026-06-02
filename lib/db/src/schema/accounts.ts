@@ -23,6 +23,7 @@ export const emailAccountsTable = sqliteTable("email_accounts", {
   imapHost: text("imap_host"),
   imapPort: integer("imap_port"),
   imapLastUid: integer("imap_last_uid"),
+  signatureHtml: text("signature_html"),
   lastPolledAt: integer("last_polled_at", { mode: "timestamp_ms" }),
   lastError: text("last_error"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),

@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS email_accounts (
   imap_host TEXT,
   imap_port INTEGER,
   imap_last_uid INTEGER,
+  signature_html TEXT,
   last_polled_at INTEGER,
   last_error TEXT,
   created_at INTEGER NOT NULL DEFAULT (${nowMsSql})
@@ -353,6 +354,9 @@ const accountColumns = sqlite.prepare("PRAGMA table_info(email_accounts)").all()
 const accountColumnNames = new Set(accountColumns.map((column) => column.name));
 if (!accountColumnNames.has("sent_today_date")) {
   sqlite.exec("ALTER TABLE email_accounts ADD COLUMN sent_today_date TEXT");
+}
+if (!accountColumnNames.has("signature_html")) {
+  sqlite.exec("ALTER TABLE email_accounts ADD COLUMN signature_html TEXT");
 }
 sqlite.exec("UPDATE email_accounts SET status = 'warming' WHERE warmup_enabled = 1 AND status = 'connected'");
 

@@ -7,7 +7,7 @@ import { mailAttachments } from "./email-attachments";
 
 export type AccountWithSecret = Pick<
   EmailAccount,
-  "email" | "name" | "provider" | "smtpHost" | "smtpPort" | "smtpUsername" | "smtpPasswordEnc"
+  "email" | "name" | "provider" | "smtpHost" | "smtpPort" | "smtpUsername" | "smtpPasswordEnc" | "signatureHtml"
 >;
 
 const GMAIL = { smtp: { host: "smtp.gmail.com", port: 587 }, imap: { host: "imap.gmail.com", port: 993 } };
@@ -230,6 +230,16 @@ function injectHtmlFooter(html: string, pixelUrl: string | null, unsubUrl: strin
   return html + footer;
 }
 
+function appendSignature(html: string, signatureHtml: string | null | undefined): string {
+  const signature = signatureHtml?.trim();
+  if (!signature) return html;
+  const block = `<br><br>${signature}`;
+  if (HTML_END_RE.test(html)) {
+    return html.replace(HTML_END_RE, `${block}</body>`);
+  }
+  return html + block;
+}
+
 function buildTextFooter(text: string, unsubUrl: string | null): string {
   if (!unsubUrl) return text;
   // No "--" / "---" separator — those trigger Gmail's signature-trim heuristic and
@@ -271,7 +281,7 @@ export async function sendEmail(account: AccountWithSecret, input: SendInput): P
 
   // Always send both text and HTML parts. Plain-text bodies get wrapped in basic HTML so
   // Gmail/Outlook render them as a coherent message rather than collapsing them behind "…".
-  const htmlBody = isHtml ? bodyForSend : wrapPlainTextAsHtml(bodyForSend);
+  const htmlBody = appendSignature(isHtml ? bodyForSend : wrapPlainTextAsHtml(bodyForSend), account.signatureHtml);
   const textBody = isHtml ? stripHtml(bodyForSend) : bodyForSend;
   const preview = (input.previewText ?? "").trim();
   mailOptions.html = injectHtmlFooter(injectPreheader(htmlBody, preview), pixelUrl, unsubUrl);
