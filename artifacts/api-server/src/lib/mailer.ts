@@ -1,5 +1,6 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import { randomBytes, createHmac, timingSafeEqual } from "node:crypto";
+import { lookup } from "node:dns/promises";
 import type { EmailAccount } from "@workspace/db";
 import { decryptSecret } from "./crypto";
 import { mailAttachments } from "./email-attachments";
@@ -54,14 +55,23 @@ export function resolveImap(account: Pick<EmailAccount, "provider" | "imapHost" 
   return { host, port, username, password };
 }
 
-export function buildTransport(account: AccountWithSecret): Transporter {
+async function resolveSmtpHostForRailway(host: string): Promise<{ host: string; servername: string }> {
+  const forceLookup = process.env["SMTP_FORCE_IPV4"] !== "0";
+  if (!forceLookup) return { host, servername: host };
+  const resolved = await lookup(host, { family: 4 });
+  return { host: resolved.address, servername: host };
+}
+
+export async function buildTransport(account: AccountWithSecret): Promise<Transporter> {
   const { host, port, username, password } = resolveSmtp(account);
+  const smtpHost = await resolveSmtpHostForRailway(host);
   return nodemailer.createTransport({
-    host,
+    host: smtpHost.host,
     port,
     secure: port === 465,
     family: 4,
     auth: { user: username, pass: password },
+    tls: { servername: smtpHost.servername },
     connectionTimeout: 20_000,
     greetingTimeout: 20_000,
     socketTimeout: 30_000,
@@ -228,7 +238,7 @@ function buildTextFooter(text: string, unsubUrl: string | null): string {
 }
 
 export async function sendEmail(account: AccountWithSecret, input: SendInput): Promise<{ messageId: string }> {
-  const transport = buildTransport(account);
+  const transport = await buildTransport(account);
   const displayName = input.fromName ?? account.name;
   const fromHeader = displayName ? `"${displayName}" <${account.email}>` : account.email;
   const toHeader = input.toName ? `"${input.toName}" <${input.to}>` : input.to;
@@ -281,7 +291,7 @@ function stripHtml(html: string): string {
 }
 
 export async function verifyTransport(account: AccountWithSecret): Promise<void> {
-  const transport = buildTransport(account);
+  const transport = await buildTransport(account);
   await transport.verify();
 }
 
