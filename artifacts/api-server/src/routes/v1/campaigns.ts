@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, campaignsTable, sequenceStepsTable, sequenceStepVariantsTable, campaignLeadsTable, leadsTable, leadListsTable, listLeadsTable } from "@workspace/db";
 import { attachmentsJson } from "../../lib/email-attachments";
 import { prioritizeCampaignLeads } from "../../lib/queue-priority";
+import { enqueueMissingCampaignJobs } from "../../lib/campaign-enqueue";
 
 const router: IRouter = Router();
 
@@ -131,9 +132,14 @@ router.post("/campaigns/:id/attach-list", async (req, res): Promise<void> => {
   }
 
   const allCampaignLeads = await db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.campaignId, id));
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, id));
+  let jobsCreated = 0;
+  if (campaign?.status === "active" && members.length > 0) {
+    jobsCreated = (await enqueueMissingCampaignJobs(id, { leadIds: members.map((member) => member.leadId) })).jobsCreated;
+  }
   await db.update(campaignsTable).set({ leadsCount: allCampaignLeads.length }).where(eq(campaignsTable.id, id));
 
-  res.json({ campaignId: id, listId: Number(listId), addedLeads: members.length, totalLeads: allCampaignLeads.length });
+  res.json({ campaignId: id, listId: Number(listId), addedLeads: members.length, totalLeads: allCampaignLeads.length, jobsCreated });
 });
 
 // ── Sequence steps ─────────────────────────────────────────────────────────

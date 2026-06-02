@@ -6,7 +6,7 @@ import {
   type Lead,
 } from "@workspace/api-client-react";
 import { LeadDetailSheet } from "@/components/leads/lead-detail-sheet";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -24,6 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Plus, MoreHorizontal, Trash2, Search, Users, Upload, FileText, CheckCircle2, Tag, X, Filter, Settings2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
+import { fetchDeliverabilityOverview } from "@/lib/deliverability";
 
 const schema = z.object({
   email: z.string().email("Valid email required"),
@@ -84,6 +85,7 @@ export default function Leads() {
 
   const { data: leads, isLoading } = useListLeads();
   const { data: labels } = useListLabels({ query: { queryKey: getListLabelsQueryKey() } });
+  const { data: deliverability } = useQuery({ queryKey: ["deliverability-overview"], queryFn: fetchDeliverabilityOverview });
 
   const invalidateLeads = () => queryClient.invalidateQueries({ queryKey: getListLeadsQueryKey() });
   const invalidateLabels = () => queryClient.invalidateQueries({ queryKey: getListLabelsQueryKey() });
@@ -309,6 +311,7 @@ export default function Leads() {
           { label: "Active", value: leadStats.active, icon: CheckCircle2 },
           { label: "Labelled", value: leadStats.labelled, icon: Tag },
           { label: "Replied", value: leadStats.replied, icon: FileText },
+          { label: "Suppressed", value: deliverability?.suppression.total ?? 0, icon: Trash2 },
         ].map((item) => (
           <Card key={item.label}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

@@ -75,7 +75,7 @@ export async function buildTransport(account: AccountWithSecret): Promise<Transp
     connectionTimeout: 20_000,
     greetingTimeout: 20_000,
     socketTimeout: 30_000,
-  });
+  } as Parameters<typeof nodemailer.createTransport>[0]);
 }
 
 export interface SendInput {

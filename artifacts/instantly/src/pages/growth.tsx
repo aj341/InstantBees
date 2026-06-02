@@ -2,15 +2,19 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   CalendarClock,
+  AlertTriangle,
   CheckCircle2,
   Flame,
   Gauge,
+  Globe,
+  ShieldCheck,
   TimerReset,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { fetchDeliverabilityOverview, severityVariant } from "@/lib/deliverability";
 
 interface GrowthOverview {
   overview: {
@@ -39,6 +43,7 @@ interface GrowthOverview {
     capacitySlotMinutes: number;
   };
   sendCalendar: CalendarRow[];
+  campaignRunway: CampaignRunwayRow[];
   timeline: TimelineRow[];
   replyClassifications: ReplyRow[];
   deliverability: DeliverabilityRow[];
@@ -71,6 +76,27 @@ interface CalendarRow {
   attempts: number;
   errorMessage: string | null;
 }
+
+interface CampaignRunwayRow {
+  campaignId: number;
+  campaignName: string;
+  status: string;
+  activeLeads: number;
+  pendingJobs: number;
+  pendingLeadTouches: number;
+  firstTouchPendingLeads: number;
+  sentLast7Days: number;
+  actualDailySendRate: number;
+  capacityDailySendRate: number;
+  runwayDailySendRate: number;
+  runwayDays: number | null;
+  firstTouchRunwayDays: number | null;
+  topUpNeeded: number;
+  thresholdDays: number;
+  comfortableDays: number;
+  health: "healthy" | "watch" | "needs_top_up" | "no_capacity" | "inactive";
+}
+
 
 interface TimelineRow {
   leadId: number | null;
@@ -215,6 +241,12 @@ function fmtPct(value: number | undefined): string {
   return `${Number(value ?? 0).toFixed(1)}%`;
 }
 
+function fmtRunway(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  if (value === 0) return "0 days";
+  return `${Number(value).toFixed(1)} days`;
+}
+
 function fmtQueueFinish(value: string | null | undefined): string {
   if (!value) return "Now";
   const date = new Date(value);
@@ -257,6 +289,11 @@ export default function Growth() {
     queryFn: fetchGrowthOverview,
     refetchInterval: 60_000,
   });
+  const { data: deliverability } = useQuery({
+    queryKey: ["deliverability-overview"],
+    queryFn: fetchDeliverabilityOverview,
+    refetchInterval: 60_000,
+  });
 
   if (isLoading) return <div className="p-8">Loading Growth Center...</div>;
   if (error || !data) return <div className="p-8 text-destructive">Growth Center failed to load.</div>;
@@ -265,6 +302,10 @@ export default function Growth() {
   const queueClearsSub = data.queueSummary.queuedCount > 0
     ? `${data.queueSummary.queuedCount.toLocaleString()}/${data.queueSummary.dailyCapacity.toLocaleString()} daily capacity; ${data.queueSummary.capacityPerSlot.toLocaleString()} every ${data.queueSummary.capacitySlotMinutes || data.queueSummary.capacityIntervalMinutes} min`
     : "No due sends waiting";
+  const runwayAlerts = data.campaignRunway.filter((row) => row.health === "needs_top_up" || row.health === "no_capacity");
+  const lowestFirstTouchRunway = data.campaignRunway
+    .filter((row) => row.status === "active" && row.firstTouchRunwayDays !== null)
+    .sort((a, b) => (a.firstTouchRunwayDays ?? 9999) - (b.firstTouchRunwayDays ?? 9999))[0];
 
   return (
     <div className="p-8 max-w-[1500px] mx-auto space-y-8">
@@ -273,16 +314,23 @@ export default function Growth() {
         <p className="text-sm text-muted-foreground mt-1">Send planning, lead intent, reply handling, deliverability, and performance insights.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <StatCard label="Upcoming Sends" value={data.sendCalendar.length.toLocaleString()} sub={`${data.overview.activeCampaigns} active campaigns`} icon={CalendarClock} />
         <StatCard label="Warmup" value={data.overview.warmupAccounts.toLocaleString()} sub="Accounts warming or warmup-enabled" icon={Flame} />
         <StatCard label="Ready For More" value={queueClearsValue} sub={queueClearsSub} icon={TimerReset} />
-        <StatCard label="Reply Rate" value={fmtPct(data.overview.replyRate)} sub={`${fmtPct(data.overview.openRate)} opens, ${fmtPct(data.overview.clickRate)} clicks`} icon={Gauge} />
+        <StatCard
+          label="Runway"
+          value={lowestFirstTouchRunway ? fmtRunway(lowestFirstTouchRunway.firstTouchRunwayDays) : "-"}
+          sub={runwayAlerts.length > 0 ? `${runwayAlerts.length} campaign${runwayAlerts.length === 1 ? "" : "s"} need top-up` : "First-touch lead runway"}
+          icon={Gauge}
+        />
+        <StatCard label="Deliverability" value={(deliverability?.recommendations.length ?? 0).toLocaleString()} sub={`${deliverability?.mailboxMetrics.filter((m) => m.severity === "risk").length ?? 0} mailbox risks`} icon={Gauge} />
       </div>
 
       <Tabs defaultValue="calendar" className="space-y-4">
         <TabsList className="flex h-auto flex-wrap justify-start">
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
+          <TabsTrigger value="runway">Runway</TabsTrigger>
           <TabsTrigger value="funnels">Funnels</TabsTrigger>
           <TabsTrigger value="icp">ICP/Labels</TabsTrigger>
           <TabsTrigger value="timing">Timing</TabsTrigger>
@@ -330,6 +378,76 @@ export default function Growth() {
                           {row.warmupEnabled && <Badge variant="outline" className="mt-1">warmup</Badge>}
                         </TableCell>
                         <TableCell><Badge variant="secondary">{row.status}</Badge></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="runway">
+          <Card>
+            <CardHeader>
+              <CardTitle>Campaign Runway</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                First-touch runway shows how long each campaign can keep starting new leads before sourcing needs a top-up.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {data.campaignRunway.length === 0 ? <EmptyState label="No campaigns to calculate runway for yet." /> : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Campaign</TableHead>
+                      <TableHead>Health</TableHead>
+                      <TableHead>Active Leads</TableHead>
+                      <TableHead>First-Touch Leads Left</TableHead>
+                      <TableHead>Pending Jobs</TableHead>
+                      <TableHead>Daily Capacity</TableHead>
+                      <TableHead>7-Day Pace</TableHead>
+                      <TableHead>Runway Rate</TableHead>
+                      <TableHead>First-Touch Runway</TableHead>
+                      <TableHead>Queue Runway</TableHead>
+                      <TableHead>Top-Up Needed</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.campaignRunway.map((row) => (
+                      <TableRow key={row.campaignId}>
+                        <TableCell>
+                          <Link href={`/campaigns/${row.campaignId}`} className="font-medium hover:underline">{row.campaignName}</Link>
+                          <div className="text-xs text-muted-foreground">{row.status}</div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              row.health === "needs_top_up" || row.health === "no_capacity"
+                                ? "destructive"
+                                : row.health === "watch"
+                                  ? "secondary"
+                                  : "outline"
+                            }
+                          >
+                            {compactReason(row.health)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{row.activeLeads}</TableCell>
+                        <TableCell>{row.firstTouchPendingLeads}</TableCell>
+                        <TableCell>{row.pendingJobs}</TableCell>
+                        <TableCell>{row.capacityDailySendRate}</TableCell>
+                        <TableCell>{row.actualDailySendRate}/day</TableCell>
+                        <TableCell>{row.runwayDailySendRate}/day</TableCell>
+                        <TableCell>{fmtRunway(row.firstTouchRunwayDays)}</TableCell>
+                        <TableCell>{fmtRunway(row.runwayDays)}</TableCell>
+                        <TableCell>
+                          {row.topUpNeeded > 0 ? (
+                            <span className="font-semibold text-destructive">{row.topUpNeeded}</span>
+                          ) : (
+                            <span className="text-muted-foreground">0</span>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -558,7 +676,83 @@ export default function Growth() {
         </TabsContent>
 
         <TabsContent value="deliverability">
-          <Card>
+          <div className="grid gap-4 xl:grid-cols-2">
+          {deliverability && (
+            <>
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" />Domain Authentication</CardTitle></CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Domain</TableHead>
+                        <TableHead>SPF</TableHead>
+                        <TableHead>DKIM</TableHead>
+                        <TableHead>DMARC</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {deliverability.domains.map((domain) => (
+                        <TableRow key={domain.domain}>
+                          <TableCell className="font-medium">{domain.domain}</TableCell>
+                          <TableCell>{domain.spf ? "Pass" : "Missing"}</TableCell>
+                          <TableCell>{domain.dkim ? "Detected" : "Review"}</TableCell>
+                          <TableCell>{domain.dmarc ? "Pass" : "Missing"}</TableCell>
+                          <TableCell><Badge variant={severityVariant(domain.severity)}>{domain.severity}</Badge></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Globe className="h-4 w-4 text-primary" />Provider Health</CardTitle></CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Provider</TableHead>
+                        <TableHead>Sent</TableHead>
+                        <TableHead>Reply</TableHead>
+                        <TableHead>Bounce</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {deliverability.providerMetrics.map((provider) => (
+                        <TableRow key={provider.provider}>
+                          <TableCell className="font-medium">{provider.provider}</TableCell>
+                          <TableCell>{provider.sent}</TableCell>
+                          <TableCell>{fmtPct(provider.replyRate)}</TableCell>
+                          <TableCell>{fmtPct(provider.bounceRate)}</TableCell>
+                          <TableCell><Badge variant={severityVariant(provider.severity)}>{provider.severity}</Badge></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {deliverability.recommendations.length > 0 && (
+                <Card className="xl:col-span-2">
+                  <CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-amber-400" />Recommended Actions</CardTitle></CardHeader>
+                  <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {deliverability.recommendations.map((item) => (
+                      <div key={item.title} className="rounded-md border border-border bg-muted/20 p-3">
+                        <Badge variant={item.severity === "risk" ? "destructive" : "secondary"} className="mb-2">{item.severity}</Badge>
+                        <p className="font-medium">{item.title}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+
+          <Card className="xl:col-span-2">
             <CardHeader><CardTitle>Deliverability Health</CardTitle></CardHeader>
             <CardContent>
               {data.deliverability.length === 0 ? <EmptyState label="No sending accounts are connected yet." /> : (
@@ -600,6 +794,7 @@ export default function Growth() {
               )}
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="throttling">

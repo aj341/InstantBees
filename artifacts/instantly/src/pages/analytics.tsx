@@ -1,8 +1,11 @@
 import { useGetAnalyticsSummary, useGetDailyAnalytics, useListCampaigns } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { AlertCircle, AlertTriangle, Mail, MessageSquare, MousePointer, Send, TrendingUp } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle, Globe, Mail, MessageSquare, MousePointer, Send, ShieldCheck, TrendingUp } from "lucide-react";
+import { fetchDeliverabilityOverview, severityLabel, severityVariant } from "@/lib/deliverability";
 
 function StatCard({ label, value, sub, detail, icon: Icon }: { label: string; value: string; sub?: string; detail?: string; icon: React.ElementType }) {
   return (
@@ -24,6 +27,7 @@ export default function Analytics() {
   const { data: summary, isLoading: isLoadingSummary, error: summaryError } = useGetAnalyticsSummary();
   const { data: daily, isLoading: isLoadingDaily, error: dailyError } = useGetDailyAnalytics();
   const { data: campaigns } = useListCampaigns();
+  const { data: deliverability } = useQuery({ queryKey: ["deliverability-overview"], queryFn: fetchDeliverabilityOverview });
   const activeCampaignNames = summary?.activeCampaignNames ?? [];
   const totalSent = summary?.totalSent ?? 0;
   const totalOpened = summary?.totalOpened ?? 0;
@@ -52,6 +56,11 @@ export default function Analytics() {
           <Badge variant="secondary">{summary?.activeCampaigns ?? 0} active campaigns</Badge>
           <Badge variant="outline">{summary?.activeAccounts ?? 0} sendable accounts</Badge>
           <Badge variant="outline">{totalClicked.toLocaleString()} tracked clicks</Badge>
+          {deliverability && (
+            <Badge variant={deliverability.tracking.publicTrackingUrl ? "default" : "destructive"}>
+              Tracking {deliverability.tracking.publicTrackingUrl ? "live" : "local"}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -152,6 +161,26 @@ export default function Analytics() {
             </Card>
           </div>
 
+          {deliverability && deliverability.recommendations.length > 0 && (
+            <Card className="border-amber-500/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <AlertTriangle className="h-4 w-4 text-amber-400" />
+                  Deliverability Recommendations
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {deliverability.recommendations.map((item) => (
+                  <div key={item.title} className="rounded-md border border-border bg-muted/20 p-3">
+                    <Badge variant={item.severity === "risk" ? "destructive" : "secondary"} className="mb-2">{item.severity}</Badge>
+                    <p className="font-medium">{item.title}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
         </>
       )}
 
@@ -234,6 +263,123 @@ export default function Analytics() {
           </CardContent>
         </Card>
       </div>
+
+      {deliverability && (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-primary" />
+                Provider Performance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Sent</TableHead>
+                    <TableHead>Open</TableHead>
+                    <TableHead>Click</TableHead>
+                    <TableHead>Reply</TableHead>
+                    <TableHead>Bounce</TableHead>
+                    <TableHead>Risk</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deliverability.providerMetrics.map((provider) => (
+                    <TableRow key={provider.provider}>
+                      <TableCell className="font-medium">{provider.provider}</TableCell>
+                      <TableCell>{provider.sent}</TableCell>
+                      <TableCell>{provider.openRate}%</TableCell>
+                      <TableCell>{provider.clickRate}%</TableCell>
+                      <TableCell>{provider.replyRate}%</TableCell>
+                      <TableCell>{provider.bounceRate}%</TableCell>
+                      <TableCell><Badge variant={severityVariant(provider.severity)}>{severityLabel(provider.severity)}</Badge></TableCell>
+                    </TableRow>
+                  ))}
+                  {deliverability.providerMetrics.length === 0 && (
+                    <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No provider data yet.</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                Sending Domain Authentication
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Domain</TableHead>
+                    <TableHead>SPF</TableHead>
+                    <TableHead>DKIM</TableHead>
+                    <TableHead>DMARC</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deliverability.domains.map((domain) => (
+                    <TableRow key={domain.domain}>
+                      <TableCell>
+                        <p className="font-medium">{domain.domain}</p>
+                        {domain.notes.length > 0 && <p className="text-xs text-muted-foreground">{domain.notes.join(" · ")}</p>}
+                      </TableCell>
+                      <TableCell>{domain.spf ? <CheckCircle className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4 text-destructive" />}</TableCell>
+                      <TableCell>{domain.dkim ? <CheckCircle className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4 text-amber-400" />}</TableCell>
+                      <TableCell>{domain.dmarc ? <CheckCircle className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4 text-destructive" />}</TableCell>
+                      <TableCell><Badge variant={severityVariant(domain.severity)}>{severityLabel(domain.severity)}</Badge></TableCell>
+                    </TableRow>
+                  ))}
+                  {deliverability.domains.length === 0 && (
+                    <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">No sending domains found.</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card className="xl:col-span-2">
+            <CardHeader>
+              <CardTitle>Content Risk Scanner</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Campaign</TableHead>
+                    <TableHead>Step</TableHead>
+                    <TableHead>Subject</TableHead>
+                    <TableHead>Links</TableHead>
+                    <TableHead>Attachments</TableHead>
+                    <TableHead>Issues</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deliverability.contentRisks.slice(0, 12).map((risk) => (
+                    <TableRow key={`${risk.campaignId}-${risk.stepId}`}>
+                      <TableCell className="font-medium">{risk.campaignName}</TableCell>
+                      <TableCell>{risk.stepNumber}</TableCell>
+                      <TableCell>{risk.subject}</TableCell>
+                      <TableCell>{risk.linkCount}</TableCell>
+                      <TableCell>{risk.attachmentCount}</TableCell>
+                      <TableCell className="max-w-sm text-xs text-muted-foreground">{risk.issues.join(" · ") || "No issues"}</TableCell>
+                      <TableCell><Badge variant={severityVariant(risk.severity)}>{severityLabel(risk.severity)}</Badge></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

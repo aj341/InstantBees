@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useListCampaigns } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { useCampaignActions } from "@/hooks/use-campaigns";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -16,11 +17,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Activity, BarChart3, Mail, Pause, Play, Plus, Search, Trash2, Users } from "lucide-react";
+import { Activity, BarChart3, Mail, Pause, Play, Plus, Search, ShieldCheck, Trash2, Users } from "lucide-react";
 import { Link } from "wouter";
+import { fetchDeliverabilityOverview, severityVariant } from "@/lib/deliverability";
 
 export default function CampaignsList() {
   const { data: campaigns, isLoading } = useListCampaigns();
+  const { data: deliverability } = useQuery({ queryKey: ["deliverability-overview"], queryFn: fetchDeliverabilityOverview });
   const { launch, pause, remove } = useCampaignActions();
   const [confirmDelete, setConfirmDelete] = useState<{ id: number; name: string } | null>(null);
   const [search, setSearch] = useState("");
@@ -64,6 +67,7 @@ export default function CampaignsList() {
           { label: "Total Sent", value: summary.sent, icon: Mail },
           { label: "Leads Enrolled", value: summary.leads, icon: Users },
           { label: "Replies", value: summary.replies, icon: BarChart3 },
+          { label: "Ready Campaigns", value: deliverability?.campaignReadiness.filter((campaign) => campaign.severity === "good").length ?? 0, icon: ShieldCheck },
         ].map((item) => (
           <Card key={item.label}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -104,6 +108,7 @@ export default function CampaignsList() {
               <TableHead>Open Rate</TableHead>
               <TableHead>Click Rate</TableHead>
               <TableHead>Reply Rate</TableHead>
+              <TableHead>Readiness</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -113,6 +118,7 @@ export default function CampaignsList() {
               const openRate = sent > 0 ? (((campaign.openCount ?? 0) / sent) * 100).toFixed(1) : "0.0";
               const clickRate = sent > 0 ? (((campaign.clickCount ?? 0) / sent) * 100).toFixed(1) : "0.0";
               const replyRate = sent > 0 ? (((campaign.replyCount ?? 0) / sent) * 100).toFixed(1) : "0.0";
+              const readiness = deliverability?.campaignReadiness.find((item) => item.id === campaign.id);
               return (
               <TableRow key={campaign.id} className="align-middle">
                 <TableCell className="font-medium">
@@ -133,6 +139,16 @@ export default function CampaignsList() {
                 <TableCell>{openRate}%</TableCell>
                 <TableCell>{clickRate}%</TableCell>
                 <TableCell>{replyRate}%</TableCell>
+                <TableCell>
+                  {readiness ? (
+                    <div className="space-y-1">
+                      <Badge variant={severityVariant(readiness.severity)}>{readiness.score}%</Badge>
+                      <p className="text-xs text-muted-foreground">{readiness.checks.filter((check) => !check.ok).length} issues</p>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Checking...</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
                     {campaign.status === "active" ? (
@@ -159,7 +175,7 @@ export default function CampaignsList() {
             );})}
             {filteredCampaigns.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                   {(campaigns ?? []).length === 0 ? "No campaigns found. Create one to get started." : "No campaigns match that search."}
                 </TableCell>
               </TableRow>

@@ -65,6 +65,7 @@ import { Link } from "wouter";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/email-editor/rich-text-editor";
 import { EmailPreview } from "@/components/email-editor/email-preview";
+import { fetchDeliverabilityOverview, severityVariant } from "@/lib/deliverability";
 
 const seqSchema = z.object({
   subject: z.string().min(1, "Subject required"),
@@ -273,6 +274,7 @@ export default function CampaignDetail() {
   const { data: steps } = useListSequences(id, { query: { enabled: !!id, queryKey: getListSequencesQueryKey(id) } });
   const { data: campaignLeads } = useListCampaignLeads(id, { query: { enabled: !!id, queryKey: getListCampaignLeadsQueryKey(id) } });
   const { data: allLeads } = useListLeads();
+  const { data: deliverability } = useQuery({ queryKey: ["deliverability-overview"], queryFn: fetchDeliverabilityOverview });
   const { data: variantReport } = useQuery<CampaignVariantReport>({
     queryKey: ["campaign-variants", id],
     enabled: !!id,
@@ -541,6 +543,8 @@ export default function CampaignDetail() {
       : null;
   const firstAbStep = variantReport?.steps.find((step) => step.variants.length > 0);
   const activeStats = activePreviewContent?.stats;
+  const campaignReadiness = deliverability?.campaignReadiness.find((item) => item.id === Number(id));
+  const campaignContentRisks = deliverability?.contentRisks.filter((risk) => risk.campaignId === Number(id)) ?? [];
   const variantBadge = (name?: string | null) => (
     name ? <Badge variant="outline" className="whitespace-nowrap text-[10px]">{name}</Badge> : null
   );
@@ -681,6 +685,52 @@ export default function CampaignDetail() {
               </CardContent>
             </Card>
           </div>
+
+          {campaignReadiness && (
+            <Card className="border-primary/20">
+              <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-primary" />
+                    Deliverability Readiness
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Infrastructure, tracking, mailbox, suppression, and content checks for this campaign.
+                  </p>
+                </div>
+                <Badge variant={severityVariant(campaignReadiness.severity)}>{campaignReadiness.score}% ready</Badge>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {campaignReadiness.checks.map((check) => (
+                    <div key={check.label} className="rounded-md border border-border bg-muted/20 p-3">
+                      <div className="flex items-center gap-2">
+                        {check.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4 text-amber-400" />}
+                        <p className="font-medium">{check.label}</p>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">{check.detail}</p>
+                    </div>
+                  ))}
+                </div>
+                {campaignContentRisks.some((risk) => risk.severity !== "good") && (
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+                    <p className="text-sm font-medium">Content items to review</p>
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      {campaignContentRisks.filter((risk) => risk.severity !== "good").map((risk) => (
+                        <div key={risk.stepId} className="rounded border border-border bg-background/60 p-2 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium">Step {risk.stepNumber}</span>
+                            <Badge variant={severityVariant(risk.severity)}>{risk.score}</Badge>
+                          </div>
+                          <p className="mt-1 text-muted-foreground">{risk.issues.join(" · ")}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
             {[

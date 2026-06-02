@@ -12,9 +12,9 @@ import {
   GetCampaignAnalyticsParams,
 } from "@workspace/api-zod";
 import { getCampaignMetrics, getGlobalMetrics, rate } from "../lib/stats";
-import { getSendableAccounts } from "../lib/account-rotation";
-import { nextSendWindowAt } from "../lib/sending-window";
 import { prioritizeCampaignLeads } from "../lib/queue-priority";
+import { enqueueMissingCampaignJobs } from "../lib/campaign-enqueue";
+import { nextSendWindowAt } from "../lib/sending-window";
 
 const router: IRouter = Router();
 
@@ -56,24 +56,6 @@ function followUpScheduledTime(previousStepAt: Date, delayDays: number, campaign
 
 function percent(part: number, total: number): number {
   return total > 0 ? Math.round((part / total) * 1000) / 10 : 0;
-}
-
-function scheduledTimesForLead(
-  baseTime: number,
-  leadIndex: number,
-  steps: Array<typeof sequenceStepsTable.$inferSelect>,
-  campaign: CampaignScheduleSettings,
-): Map<number, Date> {
-  const scheduledByStepId = new Map<number, Date>();
-  let previousStepAt: Date | null = null;
-  for (const [stepIndex, step] of steps.entries()) {
-    const scheduledAt: Date = stepIndex === 0
-      ? firstScheduledTimeForLead(baseTime, leadIndex, campaign)
-      : followUpScheduledTime(previousStepAt!, step.delayDays, campaign);
-    scheduledByStepId.set(step.id, scheduledAt);
-    previousStepAt = scheduledAt;
-  }
-  return scheduledByStepId;
 }
 
 router.get("/campaigns", async (_req, res): Promise<void> => {
@@ -256,76 +238,17 @@ router.post("/campaigns/:id/launch", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Campaign not found" });
     return;
   }
-
-  const steps = await db
-    .select()
-    .from(sequenceStepsTable)
-    .where(eq(sequenceStepsTable.campaignId, id))
-    .orderBy(asc(sequenceStepsTable.stepNumber));
-  if (steps.length === 0) {
-    res.status(400).json({ error: "Add at least one sequence step before launching" });
+  let enqueueResult: Awaited<ReturnType<typeof enqueueMissingCampaignJobs>>;
+  try {
+    enqueueResult = await enqueueMissingCampaignJobs(id);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to queue campaign" });
     return;
-  }
-
-  const leadRows = await db
-    .select({ lead: leadsTable })
-    .from(campaignLeadsTable)
-    .innerJoin(leadsTable, eq(campaignLeadsTable.leadId, leadsTable.id))
-    .where(eq(campaignLeadsTable.campaignId, id));
-  const leads = leadRows.map((r) => r.lead).filter((l) => l.status === "active");
-  if (leads.length === 0) {
-    res.status(400).json({ error: "Add at least one active lead before launching" });
-    return;
-  }
-
-  const sendable = await getSendableAccounts();
-  if (sendable.length === 0) {
-    res.status(400).json({ error: "Connect at least one email account with SMTP credentials before launching" });
-    return;
-  }
-
-  const existingJobs = await db
-    .select({ leadId: emailSendJobsTable.leadId, stepId: emailSendJobsTable.stepId, status: emailSendJobsTable.status })
-    .from(emailSendJobsTable)
-    .where(eq(emailSendJobsTable.campaignId, id));
-  const existingKeys = new Set(
-    existingJobs
-      .filter((j) => j.status !== "failed" && j.status !== "skipped")
-      .map((j) => `${j.leadId}:${j.stepId}`),
-  );
-
-  // If the campaign has a future scheduledStartAt, use that as the base time
-  // for every queued job. The worker only sends jobs where scheduledAt <= now
-  // AND campaign.status === "active", so jobs sit dormant until that moment.
-  const wallNow = Date.now();
-  const scheduledStart = existing.scheduledStartAt ? existing.scheduledStartAt.getTime() : 0;
-  const now = scheduledStart > wallNow ? scheduledStart : wallNow;
-  const jobs: Array<typeof emailSendJobsTable.$inferInsert> = [];
-  let acctIdx = 0;
-  for (const [leadIndex, lead] of leads.entries()) {
-    const account = sendable[acctIdx % sendable.length]!;
-    acctIdx++;
-    const scheduledByStepId = scheduledTimesForLead(now, leadIndex, steps, existing);
-    for (const step of steps) {
-      const key = `${lead.id}:${step.id}`;
-      if (existingKeys.has(key)) continue;
-      jobs.push({
-        campaignId: id,
-        leadId: lead.id,
-        stepId: step.id,
-        accountId: account.id,
-        scheduledAt: scheduledByStepId.get(step.id)!,
-        status: "pending",
-      });
-    }
-  }
-  if (jobs.length > 0) {
-    await db.insert(emailSendJobsTable).values(jobs);
   }
 
   const [campaign] = await db
     .update(campaignsTable)
-    .set({ status: "active", leadsCount: leads.length })
+    .set({ status: "active", leadsCount: enqueueResult.activeLeadCount })
     .where(eq(campaignsTable.id, id))
     .returning();
   res.json(campaign);

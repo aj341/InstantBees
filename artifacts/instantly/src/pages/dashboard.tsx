@@ -14,7 +14,7 @@ import {
   getListAccountsQueryKey,
   getListTemplatesQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,16 +30,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Activity, AlertTriangle, ArrowRight, CalendarClock, Inbox, Mail, Plus, Rocket, Users } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, CalendarClock, Inbox, Mail, Plus, Rocket, ShieldCheck, Users } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { toast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { fetchDeliverabilityOverview, severityVariant } from "@/lib/deliverability";
 
 export default function Dashboard() {
   const { data: summary, isLoading: isLoadingSummary } = useGetAnalyticsSummary();
   const { data: dailyStats, isLoading: isLoadingDaily } = useGetDailyAnalytics();
   const { data: campaignStats, isLoading: isLoadingCampaigns } = useGetCampaignStats();
   const { data: campaigns } = useListCampaigns();
+  const { data: deliverability } = useQuery({ queryKey: ["deliverability-overview"], queryFn: fetchDeliverabilityOverview });
   const queryClient = useQueryClient();
 
   const [resetOpen, setResetOpen] = useState(false);
@@ -138,11 +140,18 @@ export default function Dashboard() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Active Accounts</CardTitle>
+            <CardTitle className="text-base">Deliverability Health</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-semibold">{summary?.activeAccounts ?? 0}</div>
-            <p className="mt-1 text-sm text-muted-foreground">Connected mailboxes available to the scheduler.</p>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              <div className="text-3xl font-semibold">
+                {deliverability?.campaignReadiness.filter((campaign) => campaign.severity === "good").length ?? 0}
+              </div>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {deliverability ? `${deliverability.recommendations.length} active recommendations` : "Checking domain and mailbox health..."}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -155,6 +164,52 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {deliverability && (
+        <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Deliverability Command Center</CardTitle>
+              <Link href="/analytics" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                Full analytics <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-4">
+              {[
+                { label: "Tracking", value: deliverability.tracking.publicTrackingUrl ? "Live" : "Local", sub: deliverability.tracking.publicBaseUrl, risk: deliverability.tracking.publicTrackingUrl ? "good" : "risk" },
+                { label: "Domains", value: deliverability.domains.length, sub: `${deliverability.domains.filter((d) => d.severity === "risk").length} at risk`, risk: deliverability.domains.some((d) => d.severity === "risk") ? "risk" : "good" },
+                { label: "Mailboxes", value: deliverability.overview.sendableMailboxes, sub: `${deliverability.mailboxMetrics.filter((m) => m.severity === "risk").length} at risk`, risk: deliverability.mailboxMetrics.some((m) => m.severity === "risk") ? "risk" : "good" },
+                { label: "Bounce", value: `${deliverability.overview.bounceRate}%`, sub: `${deliverability.overview.totalBounced} bounced`, risk: deliverability.overview.bounceRate >= 2 ? "watch" : "good" },
+              ].map((item) => (
+                <div key={item.label} className="rounded-md border border-border bg-muted/20 p-3">
+                  <Badge variant={severityVariant(item.risk as "good" | "watch" | "risk")} className="mb-2">{item.label}</Badge>
+                  <div className="truncate text-xl font-semibold">{item.value}</div>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">{item.sub}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Needs Attention</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {deliverability.recommendations.slice(0, 4).map((item) => (
+                <div key={item.title} className="rounded-md border border-border bg-muted/20 p-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-400" />
+                    <p className="font-medium">{item.title}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
+                </div>
+              ))}
+              {deliverability.recommendations.length === 0 && (
+                <p className="text-sm text-muted-foreground">No deliverability issues detected from current data.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
         <AlertDialogContent>

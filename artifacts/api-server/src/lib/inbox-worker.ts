@@ -113,7 +113,6 @@ async function pollAccount(account: typeof emailAccountsTable.$inferSelect): Pro
     host: resolvedHost.host,
     port: imap.port,
     secure: imap.port === 993,
-    family: 4,
     auth: { user: imap.username, pass: imap.password },
     tls: { servername: resolvedHost.servername },
     logger: false,

@@ -225,6 +225,7 @@ async function eligibleAccountForCampaign(
 async function contentForLeadStep(
   step: typeof sequenceStepsTable.$inferSelect,
   leadId: number,
+  assignedVariantId?: number | null,
 ): Promise<{
   subject: string;
   previewText: string | null;
@@ -234,6 +235,29 @@ async function contentForLeadStep(
   variantId: number | null;
   variantName: string | null;
 }> {
+  if (assignedVariantId) {
+    const [assignedVariant] = await db
+      .select()
+      .from(sequenceStepVariantsTable)
+      .where(and(
+        eq(sequenceStepVariantsTable.id, assignedVariantId),
+        eq(sequenceStepVariantsTable.stepId, step.id),
+      ))
+      .limit(1);
+
+    if (assignedVariant) {
+      return {
+        subject: assignedVariant.subject,
+        previewText: assignedVariant.previewText ?? null,
+        body: assignedVariant.body,
+        bodyType: assignedVariant.bodyType,
+        attachmentsJson: assignedVariant.attachmentsJson ?? null,
+        variantId: assignedVariant.id,
+        variantName: assignedVariant.name,
+      };
+    }
+  }
+
   const variants = await db
     .select({ variant: sequenceStepVariantsTable })
     .from(sequenceStepVariantsTable)
@@ -380,7 +404,7 @@ async function processOnce(): Promise<void> {
         customFields,
         ...customFields,
       };
-      const stepContent = await contentForLeadStep(step, lead.id);
+      const stepContent = await contentForLeadStep(step, lead.id, job.variantId);
       const isHtmlBody = stepContent.bodyType === "html";
       const subject = renderMergeFields(stepContent.subject, vars);
       const body = renderMergeFields(stepContent.body, vars, { htmlEscape: isHtmlBody });

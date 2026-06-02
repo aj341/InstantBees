@@ -58,6 +58,45 @@ function mergeTagsFrom(value: string): string[] {
   return Array.from(value.matchAll(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*\}\}/g)).map((match) => match[1] ?? "");
 }
 
+function contentRiskForTemplate(template: Pick<Template, "subject" | "body" | "bodyType">): { severity: "good" | "watch" | "risk"; score: number; issues: string[] } {
+  const body = template.body ?? "";
+  const subject = template.subject ?? "";
+  const combined = `${subject}\n${body}`;
+  const lower = combined.toLowerCase();
+  const linkCount = Array.from(combined.matchAll(/https?:\/\/[^\s<>"']+|(?:www\.)[^\s<>"']+/gi)).length;
+  const riskyTerms = ["free trial", "no commitment", "limited time", "guaranteed", "urgent", "act now", "click here"];
+  const matchedTerms = riskyTerms.filter((term) => lower.includes(term));
+  const issues: string[] = [];
+  let score = 0;
+
+  if (template.bodyType === "html") {
+    score += 12;
+    issues.push("HTML body");
+  }
+  if (linkCount > 1) {
+    score += 10 + (linkCount - 1) * 5;
+    issues.push(`${linkCount} links`);
+  }
+  if (body.length > 1800) {
+    score += 8;
+    issues.push("Long body");
+  }
+  if (subject.length > 70) {
+    score += 5;
+    issues.push("Long subject");
+  }
+  if (matchedTerms.length > 0) {
+    score += matchedTerms.length * 5;
+    issues.push(`Risk terms: ${matchedTerms.slice(0, 3).join(", ")}`);
+  }
+
+  return {
+    score,
+    issues,
+    severity: score >= 35 ? "risk" : score >= 15 ? "watch" : "good",
+  };
+}
+
 export default function Templates() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -170,47 +209,61 @@ export default function Templates() {
         </div>
       ) : (
         <div className="space-y-3">
-          {templates.map((t) => (
-            <Card key={t.id} data-testid={`card-template-${t.id}`}>
-              <CardContent className="pt-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-semibold truncate">{t.name}</p>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-                        {t.bodyType === "html" ? (
-                          <><Code2 className="h-2.5 w-2.5 mr-1" />HTML</>
-                        ) : (
-                          <><Type className="h-2.5 w-2.5 mr-1" />Plain Text</>
-                        )}
-                      </Badge>
+          {templates.map((t) => {
+            const risk = contentRiskForTemplate(t);
+            return (
+              <Card key={t.id} data-testid={`card-template-${t.id}`}>
+                <CardContent className="pt-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <p className="font-semibold truncate">{t.name}</p>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+                          {t.bodyType === "html" ? (
+                            <><Code2 className="h-2.5 w-2.5 mr-1" />HTML</>
+                          ) : (
+                            <><Type className="h-2.5 w-2.5 mr-1" />Plain Text</>
+                          )}
+                        </Badge>
+                        <Badge
+                          variant={risk.severity === "risk" ? "destructive" : risk.severity === "watch" ? "secondary" : "default"}
+                          className="text-[10px] px-1.5 py-0 shrink-0"
+                        >
+                          {risk.severity === "good" ? "Clean" : `${risk.severity} risk`}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground truncate">
+                        <span className="font-medium text-foreground/70">Subject:</span> {t.subject}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                        {t.bodyType === "html"
+                          ? t.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+                          : t.body}
+                      </p>
+                      {risk.issues.length > 0 && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Review: {risk.issues.join(" / ")}
+                        </p>
+                      )}
                     </div>
-                    <p className="text-sm text-muted-foreground truncate">
-                      <span className="font-medium text-foreground/70">Subject:</span> {t.subject}
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                      {t.bodyType === "html"
-                        ? t.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
-                        : t.body}
-                    </p>
+                    <div className="flex gap-1 shrink-0">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(t)} data-testid={`button-edit-template-${t.id}`}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => del.mutate({ id: t.id })}
+                        data-testid={`button-delete-template-${t.id}`}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(t)} data-testid={`button-edit-template-${t.id}`}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => del.mutate({ id: t.id })}
-                      data-testid={`button-delete-template-${t.id}`}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 

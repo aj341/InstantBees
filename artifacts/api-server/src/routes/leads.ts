@@ -14,6 +14,7 @@ import {
 } from "@workspace/api-zod";
 import { parseLeadsCsv, type LeadRow } from "../lib/csv";
 import { classifyReply } from "../lib/reply-classifier";
+import { enqueueMissingCampaignJobs } from "../lib/campaign-enqueue";
 
 const router: IRouter = Router();
 
@@ -286,7 +287,20 @@ router.post("/leads/bulk", async (req, res): Promise<void> => {
     }
   }
 
-  res.json({ imported, skipped, total: rawLeads.length, leadIds });
+  let jobsCreated = 0;
+  if (campaignId !== undefined && leadIds.length > 0) {
+    const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId));
+    if (campaign?.status === "active") {
+      try {
+        jobsCreated = (await enqueueMissingCampaignJobs(campaignId, { leadIds })).jobsCreated;
+      } catch (error) {
+        res.status(400).json({ error: error instanceof Error ? error.message : "Failed to queue imported campaign leads" });
+        return;
+      }
+    }
+  }
+
+  res.json({ imported, skipped, total: rawLeads.length, leadIds, jobsCreated });
 });
 
 router.post("/leads", async (req, res): Promise<void> => {
@@ -571,8 +585,19 @@ router.post("/campaigns/:id/leads", async (req, res): Promise<void> => {
     .select()
     .from(campaignLeadsTable)
     .where(eq(campaignLeadsTable.campaignId, params.data.id));
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, params.data.id));
+  let jobsCreated = 0;
+  if (campaign?.status === "active") {
+    try {
+      const result = await enqueueMissingCampaignJobs(params.data.id, { leadIds: parsed.data.leadIds });
+      jobsCreated = result.jobsCreated;
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to queue new campaign leads" });
+      return;
+    }
+  }
   await db.update(campaignsTable).set({ leadsCount: count.length }).where(eq(campaignsTable.id, params.data.id));
-  res.json({ added: parsed.data.leadIds.length });
+  res.json({ added: parsed.data.leadIds.length, jobsCreated });
 });
 
 router.delete("/campaigns/:id/leads/:leadId", async (req, res): Promise<void> => {

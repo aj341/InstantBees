@@ -29,6 +29,10 @@ function envInt(name: string, fallback: number): number {
 const ACCOUNT_CAMPAIGN_COOLDOWN_MS = envInt("ACCOUNT_CAMPAIGN_COOLDOWN_MINUTES", 180) * 60_000;
 const ACCOUNT_CAMPAIGN_COOLDOWN_JITTER_MS = envInt("ACCOUNT_CAMPAIGN_COOLDOWN_JITTER_MINUTES", 30) * 60_000;
 const ACCOUNT_CAMPAIGN_DAILY_LIMIT = envInt("ACCOUNT_CAMPAIGN_DAILY_LIMIT", 5);
+const DEFAULT_RUNWAY_THRESHOLD_DAYS = envInt("CAMPAIGN_RUNWAY_THRESHOLD_DAYS", 5);
+const DEFAULT_RUNWAY_COMFORTABLE_DAYS = envInt("CAMPAIGN_RUNWAY_COMFORTABLE_DAYS", 10);
+
+type CampaignRunwayHealth = "healthy" | "watch" | "needs_top_up" | "no_capacity" | "inactive";
 
 function toIso(value: Date | string | null | undefined): string | null {
   if (!value) return null;
@@ -220,6 +224,16 @@ function plainSnippet(value: string | null | undefined, max = 160): string {
   return text.length > max ? `${text.slice(0, max - 1)}...` : text;
 }
 
+function roundOne(value: number): number {
+  return Number(value.toFixed(1));
+}
+
+function runwayDays(queueSize: number, dailyRate: number): number | null {
+  if (queueSize <= 0) return 0;
+  if (dailyRate <= 0) return null;
+  return roundOne(queueSize / dailyRate);
+}
+
 function keyForTemplate(subject: string, body: string): string {
   return `${subject.trim().toLowerCase()}::${body.trim().toLowerCase()}`;
 }
@@ -296,6 +310,78 @@ router.get("/growth/overview", async (_req, res): Promise<void> => {
     accounts,
     jobs,
   );
+
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 86_400_000);
+  const leadIdsByCampaign = new Map<number, Set<number>>();
+  for (const enrollment of enrollments) {
+    const lead = leadsById.get(enrollment.leadId);
+    if (!lead || lead.status !== "active" || isExcludedAnalyticsEmail(lead.email)) continue;
+    const set = leadIdsByCampaign.get(enrollment.campaignId) ?? new Set<number>();
+    set.add(enrollment.leadId);
+    leadIdsByCampaign.set(enrollment.campaignId, set);
+  }
+
+  const campaignRunway = campaigns.map((campaign) => {
+    const campaignJobs = analyticsJobs.filter((job) => job.campaignId === campaign.id);
+    const pendingJobs = campaignJobs.filter((job) => job.status === "pending" || job.status === "in_progress");
+    const pendingLeadTouches = new Set(pendingJobs.map((job) => job.leadId)).size;
+    const firstTouchPendingLeads = new Set(
+      pendingJobs
+        .filter((job) => stepsById.get(job.stepId)?.stepNumber === 1)
+        .map((job) => job.leadId),
+    ).size;
+    const sentLast7Days = campaignJobs.filter((job) => sentLike(job) && job.sentAt && job.sentAt >= sevenDaysAgo).length;
+    const actualDailySendRate = roundOne(sentLast7Days / 7);
+    const capacity = estimateReadyForMoreAt(now, Math.max(1, pendingJobs.length || firstTouchPendingLeads || 1), campaign, accounts, jobs);
+    const capacityDailySendRate = capacity.dailyCapacity;
+    const fallbackDailySendRate = capacityDailySendRate > 0
+      ? Math.min(capacityDailySendRate, clampPositiveInt(campaign.batchSize, 25))
+      : 0;
+    const runwayDailySendRate = campaign.status === "active"
+      ? (actualDailySendRate > 0 ? actualDailySendRate : fallbackDailySendRate)
+      : 0;
+    const thresholdDays = DEFAULT_RUNWAY_THRESHOLD_DAYS;
+    const comfortableDays = DEFAULT_RUNWAY_COMFORTABLE_DAYS;
+    const firstTouchRunwayDays = runwayDays(firstTouchPendingLeads, runwayDailySendRate);
+    const allQueuedRunwayDays = runwayDays(pendingJobs.length, runwayDailySendRate);
+    const topUpNeeded = campaign.status === "active" && runwayDailySendRate > 0
+      ? Math.max(0, Math.ceil(thresholdDays * runwayDailySendRate) - firstTouchPendingLeads)
+      : 0;
+    let health: CampaignRunwayHealth = "healthy";
+    if (campaign.status !== "active") {
+      health = "inactive";
+    } else if (runwayDailySendRate <= 0) {
+      health = "no_capacity";
+    } else if ((firstTouchRunwayDays ?? 0) < thresholdDays) {
+      health = "needs_top_up";
+    } else if ((firstTouchRunwayDays ?? 0) < comfortableDays) {
+      health = "watch";
+    }
+
+    return {
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      status: campaign.status,
+      activeLeads: leadIdsByCampaign.get(campaign.id)?.size ?? 0,
+      pendingJobs: pendingJobs.length,
+      pendingLeadTouches,
+      firstTouchPendingLeads,
+      sentLast7Days,
+      actualDailySendRate,
+      capacityDailySendRate,
+      runwayDailySendRate,
+      runwayDays: allQueuedRunwayDays,
+      firstTouchRunwayDays,
+      topUpNeeded,
+      thresholdDays,
+      comfortableDays,
+      health,
+    };
+  }).sort((a, b) => {
+    const rank: Record<CampaignRunwayHealth, number> = { needs_top_up: 0, no_capacity: 1, watch: 2, healthy: 3, inactive: 4 };
+    return rank[a.health] - rank[b.health] || (a.firstTouchRunwayDays ?? 9999) - (b.firstTouchRunwayDays ?? 9999);
+  });
 
   const sendCalendar = queuedJobs
     .slice(0, 100)
@@ -729,6 +815,7 @@ router.get("/growth/overview", async (_req, res): Promise<void> => {
       capacitySlotMinutes: readyForMore.capacitySlotMinutes,
     },
     sendCalendar,
+    campaignRunway,
     timeline: timelineEvents,
     replyClassifications,
     followUpCandidates: followUpCandidates.slice(0, 100),

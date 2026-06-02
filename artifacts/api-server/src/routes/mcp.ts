@@ -13,6 +13,7 @@ import {
   emailAccountsTable,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { enqueueMissingCampaignJobs } from "../lib/campaign-enqueue.js";
 
 const router: IRouter = Router();
 
@@ -316,6 +317,10 @@ function buildMcpServer(): Server {
           const rows = leadIds.map((lid) => ({ campaignId: campaignId!, leadId: lid }));
           await db.insert(campaignLeadsTable).values(rows).onConflictDoNothing();
           const count = await db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.campaignId, campaignId));
+          const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId));
+          if (campaign?.status === "active") {
+            await enqueueMissingCampaignJobs(campaignId, { leadIds });
+          }
           await db.update(campaignsTable).set({ leadsCount: count.length }).where(eq(campaignsTable.id, campaignId));
         }
 

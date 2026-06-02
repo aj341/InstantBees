@@ -24,6 +24,7 @@ import {
 } from "@workspace/db";
 import { importEmailAccounts } from "../lib/account-import";
 import { attachmentsJson } from "../lib/email-attachments";
+import { enqueueMissingCampaignJobs } from "../lib/campaign-enqueue";
 
 async function attachLabelsToContacts<T extends Pick<Lead, "id">>(contacts: T[]): Promise<(T & { labels: Label[] })[]> {
   if (contacts.length === 0) return [];
@@ -384,8 +385,13 @@ async function dispatch(name: string, a: Record<string, unknown>): Promise<unkno
     const members = await db.select().from(listLeadsTable).where(eq(listLeadsTable.listId, Number(a.listId)));
     if (members.length > 0) await db.insert(campaignLeadsTable).values(members.map(m => ({ campaignId: Number(a.campaignId), leadId: m.leadId }))).onConflictDoNothing();
     const all = await db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.campaignId, Number(a.campaignId)));
+    const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, Number(a.campaignId)));
+    let jobsCreated = 0;
+    if (campaign?.status === "active" && members.length > 0) {
+      jobsCreated = (await enqueueMissingCampaignJobs(Number(a.campaignId), { leadIds: members.map((member) => member.leadId) })).jobsCreated;
+    }
     await db.update(campaignsTable).set({ leadsCount: all.length }).where(eq(campaignsTable.id, Number(a.campaignId)));
-    return { campaignId: Number(a.campaignId), listId: Number(a.listId), addedLeads: members.length, totalLeads: all.length };
+    return { campaignId: Number(a.campaignId), listId: Number(a.listId), addedLeads: members.length, totalLeads: all.length, jobsCreated };
   }
   if (name === "set_sequence_steps") {
     const cid = Number(a.campaignId);

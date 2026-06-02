@@ -8,7 +8,7 @@ import {
   useTestAccount,
   getListAccountsQueryKey,
 } from "@workspace/api-client-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -24,6 +24,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, Mail, Flame, CheckCircle2, XCircle, AlertCircle, Send, Upload, Pencil } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { fetchDeliverabilityOverview, severityVariant } from "@/lib/deliverability";
 
 const PROVIDER_DEFAULTS: Record<string, { host: string; port: number }> = {
   gmail: { host: "smtp.gmail.com", port: 587 },
@@ -139,6 +140,8 @@ export default function Accounts() {
   const [bulkResult, setBulkResult] = useState<BulkImportResult | null>(null);
   const queryClient = useQueryClient();
   const { data: accounts, isLoading } = useListAccounts();
+  const { data: deliverability } = useQuery({ queryKey: ["deliverability-overview"], queryFn: fetchDeliverabilityOverview });
+  const deliverabilityByEmail = new Map((deliverability?.mailboxMetrics ?? []).map((mailbox) => [mailbox.email, mailbox]));
 
   const create = useCreateAccount({
     mutation: {
@@ -499,7 +502,9 @@ export default function Accounts() {
             {selectedAccountIds.length > 0 && <span className="text-muted-foreground">({selectedAccountIds.length} selected)</span>}
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {accounts?.map(account => (
+            {accounts?.map(account => {
+              const mailboxHealth = deliverabilityByEmail.get(account.email);
+              return (
             <Card key={account.id} data-testid={`card-account-${account.id}`} className="border-border">
               <CardContent className="pt-5 space-y-4">
                 <div className="flex items-start justify-between gap-2">
@@ -522,6 +527,23 @@ export default function Accounts() {
                     {account.status}
                   </Badge>
                 </div>
+
+                {mailboxHealth && (
+                  <div className="grid grid-cols-3 gap-2 rounded-md border border-border bg-muted/20 p-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Risk</p>
+                      <Badge variant={severityVariant(mailboxHealth.severity)} className="mt-1">{mailboxHealth.severity}</Badge>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Remaining</p>
+                      <p className="mt-1 font-semibold">{mailboxHealth.remainingToday}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Bounce</p>
+                      <p className="mt-1 font-semibold">{mailboxHealth.bounceRate}%</p>
+                    </div>
+                  </div>
+                )}
 
                 {account.status === "error" && account.lastError && (
                   <p className="text-xs text-destructive bg-destructive/10 rounded p-2 break-words">{account.lastError}</p>
@@ -601,7 +623,7 @@ export default function Accounts() {
                 </div>
               </CardContent>
             </Card>
-            ))}
+            );})}
           </div>
         </div>
       )}
