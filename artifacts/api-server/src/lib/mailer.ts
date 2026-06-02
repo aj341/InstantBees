@@ -61,6 +61,9 @@ export function buildTransport(account: AccountWithSecret): Transporter {
     port,
     secure: port === 465,
     auth: { user: username, pass: password },
+    connectionTimeout: 20_000,
+    greetingTimeout: 20_000,
+    socketTimeout: 30_000,
   });
 }
 
