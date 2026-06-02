@@ -18,6 +18,7 @@ app.listen(port, (err) => {
   }
 
   // Database startup migrations are loaded before workers start.
+  // Deploy marker: queued A/B variant analytics split.
   logger.info({ port }, "Server listening");
   if (process.env["DISABLE_SEND_WORKER"] === "1") {
     logger.warn("Email send worker disabled by DISABLE_SEND_WORKER=1");
