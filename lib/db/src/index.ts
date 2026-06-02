@@ -246,7 +246,6 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 CREATE INDEX IF NOT EXISTS send_jobs_status_sched_idx ON email_send_jobs(status, scheduled_at);
 CREATE INDEX IF NOT EXISTS send_jobs_token_idx ON email_send_jobs(tracking_token);
 CREATE INDEX IF NOT EXISTS send_jobs_message_id_idx ON email_send_jobs(message_id);
-CREATE INDEX IF NOT EXISTS send_jobs_variant_idx ON email_send_jobs(variant_id);
 CREATE INDEX IF NOT EXISTS sequence_step_variants_step_idx ON sequence_step_variants(step_id);
 CREATE INDEX IF NOT EXISTS sequence_step_variants_label_idx ON sequence_step_variants(label_id);
 CREATE INDEX IF NOT EXISTS unsub_token_idx ON unsubscribes(token);
