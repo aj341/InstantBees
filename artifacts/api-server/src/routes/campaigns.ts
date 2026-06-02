@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, and, asc, desc } from "drizzle-orm";
-import { db, campaignsTable, campaignLeadsTable, sequenceStepsTable, sequenceStepVariantsTable, dailyStatsTable, leadsTable, emailAccountsTable, emailSendJobsTable, unsubscribesTable, inboxMessagesTable, clickEventsTable } from "@workspace/db";
+import { db, campaignsTable, campaignLeadsTable, sequenceStepsTable, sequenceStepVariantsTable, dailyStatsTable, leadsTable, leadLabelsTable, emailAccountsTable, emailSendJobsTable, unsubscribesTable, inboxMessagesTable, clickEventsTable } from "@workspace/db";
 import {
   CreateCampaignBody,
   UpdateCampaignBody,
@@ -439,7 +439,7 @@ router.get("/campaigns/:id/variants", async (req, res): Promise<void> => {
     return;
   }
 
-  const [steps, variants, jobs, clicks, messages] = await Promise.all([
+  const [steps, variants, jobs, clicks, messages, leadLabels] = await Promise.all([
     db.select().from(sequenceStepsTable).where(eq(sequenceStepsTable.campaignId, cid)).orderBy(asc(sequenceStepsTable.stepNumber)),
     db
       .select({ variant: sequenceStepVariantsTable })
@@ -450,6 +450,11 @@ router.get("/campaigns/:id/variants", async (req, res): Promise<void> => {
     db.select().from(emailSendJobsTable).where(eq(emailSendJobsTable.campaignId, cid)),
     db.select().from(clickEventsTable).where(eq(clickEventsTable.campaignId, cid)),
     db.select().from(inboxMessagesTable).where(eq(inboxMessagesTable.campaignId, cid)),
+    db
+      .select({ leadId: leadLabelsTable.leadId, labelId: leadLabelsTable.labelId })
+      .from(leadLabelsTable)
+      .innerJoin(campaignLeadsTable, eq(leadLabelsTable.leadId, campaignLeadsTable.leadId))
+      .where(eq(campaignLeadsTable.campaignId, cid)),
   ]);
 
   const clicksByJobId = new Map<number, number>();
@@ -464,6 +469,28 @@ router.get("/campaigns/:id/variants", async (req, res): Promise<void> => {
     list.push(message);
     messagesByLeadId.set(message.leadId, list);
   }
+
+  const leadLabelKeys = new Set(leadLabels.map((label) => `${label.leadId}:${label.labelId}`));
+  const stepVariantLabels = new Map<number, Set<number>>();
+  for (const { variant } of variants) {
+    const labels = stepVariantLabels.get(variant.stepId) ?? new Set<number>();
+    labels.add(variant.labelId);
+    stepVariantLabels.set(variant.stepId, labels);
+  }
+
+  const pendingJobMatchesVariant = (job: typeof jobs[number], stepId: number, labelId: number): boolean => (
+    job.stepId === stepId
+    && !job.variantId
+    && (job.status === "pending" || job.status === "in_progress")
+    && leadLabelKeys.has(`${job.leadId}:${labelId}`)
+  );
+
+  const pendingJobMatchesAnyVariant = (job: typeof jobs[number], stepId: number): boolean => {
+    if (job.stepId !== stepId || job.variantId || (job.status !== "pending" && job.status !== "in_progress")) return false;
+    const labelIds = stepVariantLabels.get(stepId);
+    if (!labelIds) return false;
+    return Array.from(labelIds).some((labelId) => leadLabelKeys.has(`${job.leadId}:${labelId}`));
+  };
 
   const statsForJobs = (variantJobs: typeof jobs): {
     sent: number;
@@ -511,7 +538,10 @@ router.get("/campaigns/:id/variants", async (req, res): Promise<void> => {
   };
 
   const variantRows = variants.map(({ variant }) => {
-    const variantJobs = jobs.filter((job) => job.stepId === variant.stepId && job.variantId === variant.id);
+    const variantJobs = jobs.filter((job) => (
+      (job.stepId === variant.stepId && job.variantId === variant.id)
+      || pendingJobMatchesVariant(job, variant.stepId, variant.labelId)
+    ));
     return {
       id: variant.id,
       stepId: variant.stepId,
@@ -529,7 +559,7 @@ router.get("/campaigns/:id/variants", async (req, res): Promise<void> => {
 
   const stepsOut = steps.map((step) => {
     const stepJobs = jobs.filter((job) => job.stepId === step.id);
-    const defaultJobs = stepJobs.filter((job) => !job.variantId);
+    const defaultJobs = stepJobs.filter((job) => !job.variantId && !pendingJobMatchesAnyVariant(job, step.id));
     return {
       id: step.id,
       stepNumber: step.stepNumber,
