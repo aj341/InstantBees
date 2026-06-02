@@ -332,11 +332,13 @@ router.get("/growth/overview", async (_req, res): Promise<void> => {
         .map((job) => job.leadId),
     ).size;
     const sentLast7Days = campaignJobs.filter((job) => sentLike(job) && job.sentAt && job.sentAt >= sevenDaysAgo).length;
+    const totalSent = campaignJobs.filter(sentLike).length;
     const actualDailySendRate = roundOne(sentLast7Days / 7);
     const capacity = estimateReadyForMoreAt(now, Math.max(1, pendingJobs.length || firstTouchPendingLeads || 1), campaign, accounts, jobs);
     const capacityDailySendRate = capacity.dailyCapacity;
-    const fallbackDailySendRate = capacityDailySendRate > 0
-      ? Math.min(capacityDailySendRate, clampPositiveInt(campaign.batchSize, 25))
+    const hasSendHistory = totalSent > 0 || sentLast7Days > 0;
+    const fallbackDailySendRate = hasSendHistory && capacityDailySendRate > 0
+      ? Math.min(capacityDailySendRate, Math.max(1, clampPositiveInt(campaign.batchSize, 25)))
       : 0;
     const runwayDailySendRate = campaign.status === "active"
       ? (actualDailySendRate > 0 ? actualDailySendRate : fallbackDailySendRate)
@@ -345,14 +347,16 @@ router.get("/growth/overview", async (_req, res): Promise<void> => {
     const comfortableDays = DEFAULT_RUNWAY_COMFORTABLE_DAYS;
     const firstTouchRunwayDays = runwayDays(firstTouchPendingLeads, runwayDailySendRate);
     const allQueuedRunwayDays = runwayDays(pendingJobs.length, runwayDailySendRate);
-    const topUpNeeded = campaign.status === "active" && runwayDailySendRate > 0
+    const topUpNeeded = campaign.status === "active" && hasSendHistory && runwayDailySendRate > 0
       ? Math.max(0, Math.ceil(thresholdDays * runwayDailySendRate) - firstTouchPendingLeads)
       : 0;
     let health: CampaignRunwayHealth = "healthy";
     if (campaign.status !== "active") {
       health = "inactive";
-    } else if (runwayDailySendRate <= 0) {
+    } else if (capacityDailySendRate <= 0) {
       health = "no_capacity";
+    } else if (!hasSendHistory) {
+      health = "watch";
     } else if ((firstTouchRunwayDays ?? 0) < thresholdDays) {
       health = "needs_top_up";
     } else if ((firstTouchRunwayDays ?? 0) < comfortableDays) {
@@ -367,6 +371,7 @@ router.get("/growth/overview", async (_req, res): Promise<void> => {
       pendingJobs: pendingJobs.length,
       pendingLeadTouches,
       firstTouchPendingLeads,
+      totalSent,
       sentLast7Days,
       actualDailySendRate,
       capacityDailySendRate,
