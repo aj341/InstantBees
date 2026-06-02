@@ -30,14 +30,13 @@ function normalizeAccountStatus(input: Partial<EmailAccount>): Partial<EmailAcco
 }
 
 function cleanAccountInput<T extends Partial<EmailAccount>>(input: T): T {
-  return {
-    ...input,
-    email: input.email?.toLowerCase().trim(),
-    name: input.name?.trim() || null,
-    smtpHost: input.smtpHost?.trim() || null,
-    smtpUsername: input.smtpUsername?.trim() || null,
-    imapHost: input.imapHost?.trim() || null,
-  };
+  const cleaned = { ...input };
+  if ("email" in cleaned) cleaned.email = cleaned.email?.toLowerCase().trim() as T["email"];
+  if ("name" in cleaned) cleaned.name = (cleaned.name?.trim() || null) as T["name"];
+  if ("smtpHost" in cleaned) cleaned.smtpHost = (cleaned.smtpHost?.trim() || null) as T["smtpHost"];
+  if ("smtpUsername" in cleaned) cleaned.smtpUsername = (cleaned.smtpUsername?.trim() || null) as T["smtpUsername"];
+  if ("imapHost" in cleaned) cleaned.imapHost = (cleaned.imapHost?.trim() || null) as T["imapHost"];
+  return cleaned;
 }
 
 router.get("/accounts", async (_req, res): Promise<void> => {

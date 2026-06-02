@@ -14,7 +14,7 @@ import {
 } from "@workspace/db";
 import { classifyBounce, sendEmail, renderMergeFields, generateTrackingToken, getPublicBaseUrl, buildMessageId } from "./mailer";
 import { logger } from "./logger";
-import { getSendableAccounts } from "./account-rotation";
+import { getSendableAccounts, isSendableAccount, isTransientAccountError } from "./account-rotation";
 import { effectiveWarmupLimit } from "./warmup";
 import { isInsideSendWindow, nextSendWindowAt } from "./sending-window";
 import { customFieldsForLead } from "./contact-import";
@@ -303,7 +303,7 @@ async function processOnce(): Promise<void> {
         continue;
       }
 
-      if (!account || account.status !== "connected" && account.status !== "warming" || !account.smtpPasswordEnc) {
+      if (!account || !isSendableAccount(account)) {
         const replacement = await replacementAccount(account?.id ?? null, now);
         if (!replacement) {
           await deferJob(
@@ -468,10 +468,13 @@ async function processOnce(): Promise<void> {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const bounceKind = classifyBounce(err);
+      const transientAccountError = !bounceKind && isTransientAccountError(message);
       logger.error({ jobId: job.id, err: message }, "Failed to send campaign email");
       await db
         .update(emailSendJobsTable)
-        .set({ status: "failed", errorMessage: message, bounceKind: bounceKind ?? undefined })
+        .set(transientAccountError
+          ? { status: "pending", scheduledAt: new Date(Date.now() + 30 * 60 * 1000), errorMessage: message, bounceKind: undefined }
+          : { status: "failed", errorMessage: message, bounceKind: bounceKind ?? undefined })
         .where(eq(emailSendJobsTable.id, job.id));
       if (bounceKind) {
         await db.update(campaignsTable).set({ bounceCount: sql`${campaignsTable.bounceCount} + 1` }).where(eq(campaignsTable.id, job.campaignId));
@@ -479,7 +482,9 @@ async function processOnce(): Promise<void> {
       }
       await db
         .update(emailAccountsTable)
-        .set({ status: "error", lastError: message })
+        .set(transientAccountError
+          ? { lastError: message }
+          : { status: "error", lastError: message })
         .where(eq(emailAccountsTable.id, job.accountId));
     }
   }

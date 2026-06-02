@@ -3,15 +3,22 @@ import { campaignsTable, db, emailAccountsTable, emailSendJobsTable } from "@wor
 
 type AccountRow = typeof emailAccountsTable.$inferSelect;
 
-export function isSendableAccount(account: Pick<AccountRow, "status" | "smtpPasswordEnc">): boolean {
-  return (account.status === "connected" || account.status === "warming") && !!account.smtpPasswordEnc;
+export function isTransientAccountError(message: string | null | undefined): boolean {
+  if (!message) return false;
+  return /timeout|timed out|etimedout|econnreset|econnrefused|esocket|econnection|greeting never received|temporar/i.test(message);
+}
+
+export function isSendableAccount(account: Pick<AccountRow, "status" | "smtpPasswordEnc" | "lastError">): boolean {
+  if (!account.smtpPasswordEnc) return false;
+  if (account.status === "connected" || account.status === "warming") return true;
+  return account.status === "error" && isTransientAccountError(account.lastError);
 }
 
 export async function getSendableAccounts(excludeAccountId?: number): Promise<AccountRow[]> {
   const accounts = await db
     .select()
     .from(emailAccountsTable)
-    .where(inArray(emailAccountsTable.status, ["connected", "warming"]))
+    .where(inArray(emailAccountsTable.status, ["connected", "warming", "error"]))
     .orderBy(emailAccountsTable.createdAt);
 
   return accounts.filter((account) => {
@@ -92,13 +99,6 @@ export async function hasPendingJobsForAccount(accountId: number): Promise<boole
 }
 
 export async function hasAlternativeSendableAccount(accountId: number): Promise<boolean> {
-  const [account] = await db
-    .select({ id: emailAccountsTable.id })
-    .from(emailAccountsTable)
-    .where(and(
-      ne(emailAccountsTable.id, accountId),
-      inArray(emailAccountsTable.status, ["connected", "warming"]),
-    ))
-    .limit(1);
-  return !!account;
+  const accounts = await getSendableAccounts(accountId);
+  return accounts.length > 0;
 }
