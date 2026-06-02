@@ -230,10 +230,27 @@ function injectHtmlFooter(html: string, pixelUrl: string | null, unsubUrl: strin
   return html + footer;
 }
 
-function appendSignature(html: string, signatureHtml: string | null | undefined): string {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function signatureForAccount(signatureHtml: string, accountEmail: string): string {
+  const replacements = [
+    "aj@designbees.com.au",
+    "nathan@designbees.com.au",
+  ];
+  let signature = signatureHtml;
+  for (const email of replacements) {
+    signature = signature.replace(new RegExp(escapeRegExp(email), "gi"), accountEmail);
+    signature = signature.replace(new RegExp(`mailto:${escapeRegExp(email)}`, "gi"), `mailto:${accountEmail}`);
+  }
+  return signature;
+}
+
+function appendSignature(html: string, signatureHtml: string | null | undefined, accountEmail: string): string {
   const signature = signatureHtml?.trim();
   if (!signature) return html;
-  const block = `<br><br>${signature}`;
+  const block = `<br><br>${signatureForAccount(signature, accountEmail)}`;
   if (HTML_END_RE.test(html)) {
     return html.replace(HTML_END_RE, `${block}</body>`);
   }
@@ -281,7 +298,7 @@ export async function sendEmail(account: AccountWithSecret, input: SendInput): P
 
   // Always send both text and HTML parts. Plain-text bodies get wrapped in basic HTML so
   // Gmail/Outlook render them as a coherent message rather than collapsing them behind "…".
-  const htmlBody = appendSignature(isHtml ? bodyForSend : wrapPlainTextAsHtml(bodyForSend), account.signatureHtml);
+  const htmlBody = appendSignature(isHtml ? bodyForSend : wrapPlainTextAsHtml(bodyForSend), account.signatureHtml, account.email);
   const textBody = isHtml ? stripHtml(bodyForSend) : bodyForSend;
   const preview = (input.previewText ?? "").trim();
   mailOptions.html = injectHtmlFooter(injectPreheader(htmlBody, preview), pixelUrl, unsubUrl);
