@@ -81,6 +81,68 @@ router.patch("/campaigns/:id/sequences/:stepId", async (req, res): Promise<void>
   res.json(step);
 });
 
+router.post("/campaigns/:id/sequences/:stepId/variants", async (req, res): Promise<void> => {
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const rawStepId = Array.isArray(req.params.stepId) ? req.params.stepId[0] : req.params.stepId;
+  const campaignId = parseInt(rawId, 10);
+  const stepId = parseInt(rawStepId, 10);
+  if (!Number.isFinite(campaignId) || !Number.isFinite(stepId)) {
+    res.status(400).json({ error: "Invalid campaign or step id" });
+    return;
+  }
+
+  const body = req.body as {
+    labelId?: unknown;
+    name?: unknown;
+    subject?: unknown;
+    previewText?: unknown;
+    body?: unknown;
+    bodyType?: unknown;
+    attachments?: unknown;
+    priority?: unknown;
+  };
+  const labelId = Number(body.labelId);
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const subject = typeof body.subject === "string" ? body.subject.trim() : "";
+  const variantBody = typeof body.body === "string" ? body.body : "";
+  const bodyType = body.bodyType === "html" ? "html" : "text";
+  const priority = Number.isFinite(Number(body.priority)) ? Number(body.priority) : 0;
+  if (!Number.isFinite(labelId) || labelId <= 0 || !name || !subject || !variantBody) {
+    res.status(400).json({ error: "labelId, name, subject and body are required" });
+    return;
+  }
+
+  const [step] = await db
+    .select()
+    .from(sequenceStepsTable)
+    .where(and(eq(sequenceStepsTable.id, stepId), eq(sequenceStepsTable.campaignId, campaignId)));
+  if (!step) {
+    res.status(404).json({ error: "Step not found" });
+    return;
+  }
+
+  const values = {
+    stepId,
+    labelId,
+    name,
+    subject,
+    previewText: typeof body.previewText === "string" && body.previewText.trim() ? body.previewText.trim() : null,
+    body: variantBody,
+    bodyType,
+    attachmentsJson: attachmentsJson(body.attachments),
+    priority,
+  };
+  const [variant] = await db
+    .insert(sequenceStepVariantsTable)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [sequenceStepVariantsTable.stepId, sequenceStepVariantsTable.labelId],
+      set: values,
+    })
+    .returning();
+  res.status(201).json(variant);
+});
+
 router.post("/campaigns/:id/sequences/:stepId/test", async (req, res): Promise<void> => {
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const rawStepId = Array.isArray(req.params.stepId) ? req.params.stepId[0] : req.params.stepId;
