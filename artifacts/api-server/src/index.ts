@@ -17,6 +17,7 @@ app.listen(port, (err) => {
     process.exit(1);
   }
 
+  // Database startup migrations are loaded before workers start.
   logger.info({ port }, "Server listening");
   if (process.env["DISABLE_SEND_WORKER"] === "1") {
     logger.warn("Email send worker disabled by DISABLE_SEND_WORKER=1");
