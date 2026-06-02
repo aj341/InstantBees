@@ -11,6 +11,8 @@ export const emailSendJobsTable = sqliteTable("email_send_jobs", {
   leadId: integer("lead_id").notNull(),
   stepId: integer("step_id").notNull(),
   accountId: integer("account_id").notNull(),
+  variantId: integer("variant_id"),
+  variantName: text("variant_name"),
   status: text("status", { enum: sendJobStatusValues }).notNull().default("pending"),
   scheduledAt: integer("scheduled_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
   sentAt: integer("sent_at", { mode: "timestamp_ms" }),

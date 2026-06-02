@@ -186,6 +186,8 @@ CREATE TABLE IF NOT EXISTS email_send_jobs (
   lead_id INTEGER NOT NULL,
   step_id INTEGER NOT NULL,
   account_id INTEGER NOT NULL,
+  variant_id INTEGER,
+  variant_name TEXT,
   status TEXT NOT NULL DEFAULT 'pending',
   scheduled_at INTEGER NOT NULL DEFAULT (${nowMsSql}),
   sent_at INTEGER,
@@ -244,6 +246,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 CREATE INDEX IF NOT EXISTS send_jobs_status_sched_idx ON email_send_jobs(status, scheduled_at);
 CREATE INDEX IF NOT EXISTS send_jobs_token_idx ON email_send_jobs(tracking_token);
 CREATE INDEX IF NOT EXISTS send_jobs_message_id_idx ON email_send_jobs(message_id);
+CREATE INDEX IF NOT EXISTS send_jobs_variant_idx ON email_send_jobs(variant_id);
 CREATE INDEX IF NOT EXISTS sequence_step_variants_step_idx ON sequence_step_variants(step_id);
 CREATE INDEX IF NOT EXISTS sequence_step_variants_label_idx ON sequence_step_variants(label_id);
 CREATE INDEX IF NOT EXISTS unsub_token_idx ON unsubscribes(token);
@@ -291,6 +294,49 @@ const sequenceVariantColumnNames = new Set(sequenceVariantColumns.map((column) =
 if (!sequenceVariantColumnNames.has("attachments_json")) {
   sqlite.exec("ALTER TABLE sequence_step_variants ADD COLUMN attachments_json TEXT");
 }
+
+const sendJobColumns = sqlite.prepare("PRAGMA table_info(email_send_jobs)").all() as Array<{ name: string }>;
+const sendJobColumnNames = new Set(sendJobColumns.map((column) => column.name));
+if (!sendJobColumnNames.has("variant_id")) {
+  sqlite.exec("ALTER TABLE email_send_jobs ADD COLUMN variant_id INTEGER");
+}
+if (!sendJobColumnNames.has("variant_name")) {
+  sqlite.exec("ALTER TABLE email_send_jobs ADD COLUMN variant_name TEXT");
+}
+sqlite.exec("CREATE INDEX IF NOT EXISTS send_jobs_variant_idx ON email_send_jobs(variant_id)");
+sqlite.exec(`
+UPDATE email_send_jobs
+SET
+  variant_id = (
+    SELECT sequence_step_variants.id
+    FROM sequence_step_variants
+    INNER JOIN lead_labels
+      ON lead_labels.label_id = sequence_step_variants.label_id
+      AND lead_labels.lead_id = email_send_jobs.lead_id
+    WHERE sequence_step_variants.step_id = email_send_jobs.step_id
+    ORDER BY sequence_step_variants.priority DESC, sequence_step_variants.id ASC
+    LIMIT 1
+  ),
+  variant_name = (
+    SELECT sequence_step_variants.name
+    FROM sequence_step_variants
+    INNER JOIN lead_labels
+      ON lead_labels.label_id = sequence_step_variants.label_id
+      AND lead_labels.lead_id = email_send_jobs.lead_id
+    WHERE sequence_step_variants.step_id = email_send_jobs.step_id
+    ORDER BY sequence_step_variants.priority DESC, sequence_step_variants.id ASC
+    LIMIT 1
+  )
+WHERE variant_id IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM sequence_step_variants
+    INNER JOIN lead_labels
+      ON lead_labels.label_id = sequence_step_variants.label_id
+      AND lead_labels.lead_id = email_send_jobs.lead_id
+    WHERE sequence_step_variants.step_id = email_send_jobs.step_id
+  );
+`);
 
 const leadColumns = sqlite.prepare("PRAGMA table_info(leads)").all() as Array<{ name: string }>;
 const leadColumnNames = new Set(leadColumns.map((column) => column.name));

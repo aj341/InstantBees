@@ -42,6 +42,7 @@ export function classifyReply(input: {
     /automatic reply/,
     /auto-?reply/,
     /thank you for your email/,
+    /thank you for reaching out/,
     /away from (the )?office/,
     /\bi am away\b/,
     /\bi'?m away\b/,

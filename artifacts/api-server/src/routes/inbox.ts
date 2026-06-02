@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db, inboxMessagesTable } from "@workspace/db";
 import {
   GetInboxMessageParams,
@@ -14,7 +14,7 @@ router.get("/inbox", async (_req, res): Promise<void> => {
     .select()
     .from(inboxMessagesTable)
     .where(eq(inboxMessagesTable.isArchived, false))
-    .orderBy(inboxMessagesTable.receivedAt);
+    .orderBy(desc(inboxMessagesTable.receivedAt));
   res.json(messages);
 });
 

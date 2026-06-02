@@ -24,7 +24,7 @@ function wrapPlainTextAsHtml(text: string): string {
   return paragraphs
     .map(
       (p) =>
-        `<p style="margin:0 0 1em 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.5;color:#222;">${p}</p>`,
+        `<p style="margin:0 0 1em 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.5;color:#222;white-space:normal;overflow-wrap:anywhere;word-break:normal;">${p}</p>`,
     )
     .join("");
 }
@@ -33,6 +33,12 @@ const MOBILE_PREVIEW_CSS = `
 <style data-preview-mobile="true">
   html, body { width: 100% !important; min-width: 0 !important; overflow-x: hidden !important; }
   body { margin-left: 0 !important; margin-right: 0 !important; }
+  body, p, div, span, td, th, a {
+    max-width: 100% !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+  }
   table, tbody, tr, td, th { box-sizing: border-box !important; }
   table { width: 100% !important; max-width: 100% !important; table-layout: auto !important; }
   table[width], table[style*="width:"] { width: 100% !important; max-width: 100% !important; }
@@ -65,7 +71,10 @@ function buildDocument(body: string, bodyType: "text" | "html", device: "desktop
   }
   const doc = `<!doctype html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
-  body { margin: 0; padding: 24px; background: #ffffff; color: #222; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 14px; line-height: 1.5; word-wrap: break-word; }
+  * { box-sizing: border-box; }
+  html, body { width: 100%; min-width: 0; overflow-x: hidden; }
+  body { margin: 0; padding: 24px; background: #ffffff; color: #222; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; word-break: normal; }
+  p, div, span, td, th, a { max-width: 100%; overflow-wrap: anywhere; word-break: normal; }
   a { color: #1a73e8; }
   img { max-width: 100%; height: auto; }
 </style>
@@ -78,7 +87,9 @@ export function EmailPreview({ body, bodyType, subject, previewText, className }
 
   const doc = useMemo(() => buildDocument(body, bodyType, device), [body, bodyType, device]);
 
-  const widthClass = device === "mobile" ? "w-[375px] max-w-full" : "w-full max-w-[640px]";
+  const previewFrameStyle = device === "mobile"
+    ? { width: 375, maxWidth: "100%" }
+    : { width: "100%", maxWidth: 640 };
 
   return (
     <div className={cn("flex flex-col rounded-md border border-input bg-muted/20 overflow-hidden", className)}>
@@ -114,7 +125,10 @@ export function EmailPreview({ body, bodyType, subject, previewText, className }
         </div>
       </div>
       <div className="flex flex-1 justify-center bg-muted/10 p-4 overflow-auto">
-        <div className={cn("rounded-md border border-border bg-white shadow-sm transition-all", widthClass)}>
+        <div
+          className="rounded-md border border-border bg-white shadow-sm transition-all overflow-hidden"
+          style={previewFrameStyle}
+        >
           {(subject || previewText) && (
             <div className="border-b border-border px-4 py-2">
               {subject && (

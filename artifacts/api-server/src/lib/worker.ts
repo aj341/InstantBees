@@ -435,6 +435,8 @@ async function processOnce(): Promise<void> {
           messageId,
           trackingToken: trackingToken ?? undefined,
           unsubscribeToken: unsubscribeToken ?? undefined,
+          variantId: stepContent.variantId ?? null,
+          variantName: stepContent.variantName ?? null,
         })
         .where(eq(emailSendJobsTable.id, job.id));
 

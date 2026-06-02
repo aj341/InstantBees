@@ -35,7 +35,7 @@ import {
   getListAccountsQueryKey,
   getListLabelsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -115,6 +115,48 @@ type CampaignLeadWithProgress = {
   sequenceProgress?: SequenceProgress | null;
 };
 
+type StepVariantStats = {
+  id: number;
+  stepId: number;
+  labelId?: number | null;
+  name: string;
+  subject: string;
+  previewText?: string | null;
+  body: string;
+  bodyType: "text" | "html";
+  attachmentsJson?: string | null;
+  sent: number;
+  pending: number;
+  failed: number;
+  skipped: number;
+  opened: number;
+  clicked: number;
+  totalClicks: number;
+  replied: number;
+  bounced: number;
+  positiveReplies: number;
+  openRate: number;
+  clickRate: number;
+  replyRate: number;
+  bounceRate: number;
+};
+
+type CampaignVariantStep = {
+  id: number;
+  stepNumber: number;
+  subject: string;
+  previewText?: string | null;
+  body: string;
+  bodyType: "text" | "html";
+  defaultStats: Omit<StepVariantStats, "id" | "stepId" | "labelId" | "name" | "subject" | "previewText" | "body" | "bodyType" | "attachmentsJson">;
+  variants: StepVariantStats[];
+};
+
+type CampaignVariantReport = {
+  campaignId: number;
+  steps: CampaignVariantStep[];
+};
+
 const SEQUENCE_STATUS_LABELS: Record<SequenceProgress["status"], string> = {
   not_queued: "Not queued",
   waiting: "Waiting",
@@ -178,6 +220,7 @@ export default function CampaignDetail() {
   const [batchIntervalInput, setBatchIntervalInput] = useState("60");
   const [activeTab, setActiveTab] = useState("overview");
   const [sequencePreviewIndex, setSequencePreviewIndex] = useState(0);
+  const [activeVariantByStepId, setActiveVariantByStepId] = useState<Record<number, number | "default">>({});
 
   const { data: templates } = useListTemplates({ query: { queryKey: getListTemplatesQueryKey() } });
   const { data: accounts } = useListAccounts({ query: { queryKey: getListAccountsQueryKey() } });
@@ -230,6 +273,15 @@ export default function CampaignDetail() {
   const { data: steps } = useListSequences(id, { query: { enabled: !!id, queryKey: getListSequencesQueryKey(id) } });
   const { data: campaignLeads } = useListCampaignLeads(id, { query: { enabled: !!id, queryKey: getListCampaignLeadsQueryKey(id) } });
   const { data: allLeads } = useListLeads();
+  const { data: variantReport } = useQuery<CampaignVariantReport>({
+    queryKey: ["campaign-variants", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const response = await fetch(`/api/campaigns/${id}/variants`);
+      if (!response.ok) throw new Error("Failed to load campaign variants");
+      return response.json();
+    },
+  });
 
   useEffect(() => {
     setScheduledStartInput(toDateTimeLocal(campaign?.scheduledStartAt ?? null));
@@ -461,6 +513,37 @@ export default function CampaignDetail() {
     return { ...step, stepNumber, sentLeadCount, queuedLeadCount, activeLeadCount };
   });
   const activePreviewStep = sequencePreviewSteps[sequencePreviewIndex] ?? sequencePreviewSteps[0];
+  const variantStep = activePreviewStep
+    ? variantReport?.steps.find((step) => step.id === activePreviewStep.id)
+    : undefined;
+  const activeVariantKey = activePreviewStep ? activeVariantByStepId[activePreviewStep.id] ?? "default" : "default";
+  const activeVariant = typeof activeVariantKey === "number"
+    ? variantStep?.variants.find((variant) => variant.id === activeVariantKey)
+    : undefined;
+  const activePreviewContent = activeVariant
+    ? {
+        subject: activeVariant.subject,
+        previewText: activeVariant.previewText,
+        body: activeVariant.body,
+        bodyType: activeVariant.bodyType,
+        label: activeVariant.name,
+        stats: activeVariant,
+      }
+    : activePreviewStep
+      ? {
+          subject: activePreviewStep.subject,
+          previewText: activePreviewStep.previewText,
+          body: activePreviewStep.body,
+          bodyType: (activePreviewStep.bodyType ?? "text") as "text" | "html",
+          label: variantStep?.variants.length ? "Default / fallback" : "Default",
+          stats: variantStep?.defaultStats,
+        }
+      : null;
+  const firstAbStep = variantReport?.steps.find((step) => step.variants.length > 0);
+  const activeStats = activePreviewContent?.stats;
+  const variantBadge = (name?: string | null) => (
+    name ? <Badge variant="outline" className="whitespace-nowrap text-[10px]">{name}</Badge> : null
+  );
 
   return (
     <div className="p-8 max-w-[1500px] mx-auto space-y-6">
@@ -674,48 +757,61 @@ export default function CampaignDetail() {
               ) : (
                 <div className="space-y-6">
                   <div className="flex gap-3 overflow-x-auto pb-2">
-                    {sequencePreviewSteps.map((step, index) => (
-                      <button
-                        key={step.id}
-                        type="button"
-                        onClick={() => setSequencePreviewIndex(index)}
-                        className={`min-w-[280px] rounded-lg border bg-card p-4 text-left transition-colors ${
-                          sequencePreviewIndex === index
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/50 hover:bg-accent/30"
-                        }`}
-                        data-testid={`button-sequence-preview-step-${step.id}`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Step {step.stepNumber}</p>
-                            <p className="mt-1 line-clamp-2 font-semibold">{step.subject}</p>
+                    {sequencePreviewSteps.map((step, index) => {
+                      const reportStep = variantReport?.steps.find((item) => item.id === step.id);
+                      return (
+                        <button
+                          key={step.id}
+                          type="button"
+                          onClick={() => setSequencePreviewIndex(index)}
+                          className={`min-w-[280px] rounded-lg border bg-card p-4 text-left transition-colors ${
+                            sequencePreviewIndex === index
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/50 hover:bg-accent/30"
+                          }`}
+                          data-testid={`button-sequence-preview-step-${step.id}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">Step {step.stepNumber}</p>
+                              <p className="mt-1 line-clamp-2 font-semibold">{step.subject}</p>
+                            </div>
+                            <Badge variant={step.queuedLeadCount > 0 ? "default" : "secondary"}>
+                              {step.queuedLeadCount > 0 ? "Next up" : "Ready"}
+                            </Badge>
                           </div>
-                          <Badge variant={step.queuedLeadCount > 0 ? "default" : "secondary"}>
-                            {step.queuedLeadCount > 0 ? "Next up" : "Ready"}
-                          </Badge>
-                        </div>
-                        <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-                          <div className="rounded-md bg-muted/40 p-2">
-                            <div className="text-base font-bold">{step.sentLeadCount}</div>
-                            <div className="text-muted-foreground">sent</div>
+                          {reportStep?.variants.length ? (
+                            <div className="mt-3 flex flex-wrap gap-1">
+                              <Badge variant="outline" className="text-[10px]">A/B: {reportStep.variants.length}</Badge>
+                              {reportStep.variants.map((variant) => (
+                                <Badge key={variant.id} variant="secondary" className="text-[10px]">
+                                  {variant.name}: {variant.sent} sent
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : null}
+                          <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+                            <div className="rounded-md bg-muted/40 p-2">
+                              <div className="text-base font-bold">{step.sentLeadCount}</div>
+                              <div className="text-muted-foreground">sent</div>
+                            </div>
+                            <div className="rounded-md bg-muted/40 p-2">
+                              <div className="text-base font-bold">{step.queuedLeadCount}</div>
+                              <div className="text-muted-foreground">queued</div>
+                            </div>
+                            <div className="rounded-md bg-muted/40 p-2">
+                              <div className="text-base font-bold">{step.activeLeadCount}</div>
+                              <div className="text-muted-foreground">active</div>
+                            </div>
                           </div>
-                          <div className="rounded-md bg-muted/40 p-2">
-                            <div className="text-base font-bold">{step.queuedLeadCount}</div>
-                            <div className="text-muted-foreground">queued</div>
-                          </div>
-                          <div className="rounded-md bg-muted/40 p-2">
-                            <div className="text-base font-bold">{step.activeLeadCount}</div>
-                            <div className="text-muted-foreground">active</div>
-                          </div>
-                        </div>
-                        <p className="mt-3 text-xs text-muted-foreground">
-                          {index === 0
-                            ? "Day 0: sent when the campaign launches."
-                            : `Delay: ${step.delayDays} day${step.delayDays === 1 ? "" : "s"} after step ${index}.`}
-                        </p>
-                      </button>
-                    ))}
+                          <p className="mt-3 text-xs text-muted-foreground">
+                            {index === 0
+                              ? "Day 0: sent when the campaign launches."
+                              : `Delay: ${step.delayDays} day${step.delayDays === 1 ? "" : "s"} after step ${index}.`}
+                          </p>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {activePreviewStep && (
@@ -728,7 +824,10 @@ export default function CampaignDetail() {
                               <p className="text-xs uppercase tracking-wide text-muted-foreground">
                                 Email {activePreviewStep.stepNumber} of {sequencePreviewSteps.length}
                               </p>
-                              <p className="truncate font-semibold">{activePreviewStep.subject}</p>
+                              <p className="truncate font-semibold">{activePreviewContent?.subject ?? activePreviewStep.subject}</p>
+                              {activePreviewContent?.label && (
+                                <p className="mt-0.5 text-xs text-muted-foreground">{activePreviewContent.label}</p>
+                              )}
                             </div>
                             <div className="flex items-center gap-2">
                               <Button
@@ -751,36 +850,83 @@ export default function CampaignDetail() {
                               >
                                 <ChevronRight className="h-4 w-4" />
                               </Button>
-                              <Badge variant="outline">{activePreviewStep.bodyType ?? "text"}</Badge>
+                              <Badge variant="outline">{activePreviewContent?.bodyType ?? activePreviewStep.bodyType ?? "text"}</Badge>
                             </div>
                           </div>
+                          {variantStep?.variants.length ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={activeVariantKey === "default" ? "default" : "outline"}
+                                onClick={() => setActiveVariantByStepId((current) => ({ ...current, [activePreviewStep.id]: "default" }))}
+                                data-testid="button-preview-variant-default"
+                              >
+                                Default
+                              </Button>
+                              {variantStep.variants.map((variant) => (
+                                <Button
+                                  key={variant.id}
+                                  type="button"
+                                  size="sm"
+                                  variant={activeVariantKey === variant.id ? "default" : "outline"}
+                                  onClick={() => setActiveVariantByStepId((current) => ({ ...current, [activePreviewStep.id]: variant.id }))}
+                                  data-testid={`button-preview-variant-${variant.id}`}
+                                >
+                                  {variant.name}
+                                </Button>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="h-[620px]">
-                          <EmailPreview
-                            body={activePreviewStep.body}
-                            bodyType={(activePreviewStep.bodyType ?? "text") as "text" | "html"}
-                            subject={activePreviewStep.subject}
-                            previewText={activePreviewStep.previewText ?? undefined}
-                            className="h-full rounded-none border-0"
-                          />
+                          {activePreviewContent && (
+                            <EmailPreview
+                              body={activePreviewContent.body}
+                              bodyType={activePreviewContent.bodyType}
+                              subject={activePreviewContent.subject}
+                              previewText={activePreviewContent.previewText ?? undefined}
+                              className="h-full rounded-none border-0"
+                            />
+                          )}
                         </div>
                       </div>
                         <div className="border-t border-border bg-muted/20 p-4 xl:border-l xl:border-t-0">
-                          <p className="text-sm font-semibold">Progress at this step</p>
+                          <p className="text-sm font-semibold">Progress for {activePreviewContent?.label ?? "this step"}</p>
                           <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
                             <div className="rounded-md bg-background/70 p-3">
-                              <div className="text-xl font-bold">{activePreviewStep.sentLeadCount}</div>
+                              <div className="text-xl font-bold">{activeStats?.sent ?? activePreviewStep.sentLeadCount}</div>
                               <div className="text-muted-foreground">sent</div>
                             </div>
                             <div className="rounded-md bg-background/70 p-3">
-                              <div className="text-xl font-bold">{activePreviewStep.queuedLeadCount}</div>
+                              <div className="text-xl font-bold">{activeStats?.pending ?? activePreviewStep.queuedLeadCount}</div>
                               <div className="text-muted-foreground">queued</div>
                             </div>
                             <div className="rounded-md bg-background/70 p-3">
-                              <div className="text-xl font-bold">{activePreviewStep.activeLeadCount}</div>
-                              <div className="text-muted-foreground">active</div>
+                              <div className="text-xl font-bold">{activeStats?.replied ?? 0}</div>
+                              <div className="text-muted-foreground">replies</div>
                             </div>
                           </div>
+                          {activeStats && (
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                              <div className="rounded-md bg-background/70 p-3">
+                                <div className="text-base font-bold">{activeStats.openRate}%</div>
+                                <div className="text-muted-foreground">open rate</div>
+                              </div>
+                              <div className="rounded-md bg-background/70 p-3">
+                                <div className="text-base font-bold">{activeStats.clickRate}%</div>
+                                <div className="text-muted-foreground">click rate</div>
+                              </div>
+                              <div className="rounded-md bg-background/70 p-3">
+                                <div className="text-base font-bold">{activeStats.replyRate}%</div>
+                                <div className="text-muted-foreground">reply rate</div>
+                              </div>
+                              <div className="rounded-md bg-background/70 p-3">
+                                <div className="text-base font-bold">{activeStats.bounceRate}%</div>
+                                <div className="text-muted-foreground">bounce rate</div>
+                              </div>
+                            </div>
+                          )}
                           <div className="mt-4 rounded-md border border-border bg-background/60 p-3 text-sm">
                             <p className="font-medium">Timing</p>
                             <p className="mt-1 text-muted-foreground">
@@ -807,6 +953,55 @@ export default function CampaignDetail() {
               )}
             </CardContent>
           </Card>
+
+          {firstAbStep && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  A/B Performance
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Step {firstAbStep.stepNumber}: compare each variant by sends, engagement, replies, and bounces.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Variant</TableHead>
+                        <TableHead className="text-right">Sent</TableHead>
+                        <TableHead className="text-right">Queued</TableHead>
+                        <TableHead className="text-right">Open</TableHead>
+                        <TableHead className="text-right">Click</TableHead>
+                        <TableHead className="text-right">Reply</TableHead>
+                        <TableHead className="text-right">Bounce</TableHead>
+                        <TableHead className="text-right">Positive</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {firstAbStep.variants.map((variant) => (
+                        <TableRow key={variant.id} data-testid={`row-ab-variant-${variant.id}`}>
+                          <TableCell>
+                            <div className="font-medium">{variant.name}</div>
+                            <div className="text-xs text-muted-foreground line-clamp-1">{variant.subject}</div>
+                          </TableCell>
+                          <TableCell className="text-right font-medium">{variant.sent}</TableCell>
+                          <TableCell className="text-right">{variant.pending}</TableCell>
+                          <TableCell className="text-right">{variant.openRate}%</TableCell>
+                          <TableCell className="text-right">{variant.clickRate}%</TableCell>
+                          <TableCell className="text-right">{variant.replyRate}%</TableCell>
+                          <TableCell className="text-right">{variant.bounceRate}%</TableCell>
+                          <TableCell className="text-right">{variant.positiveReplies}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader><CardTitle>Deliverability Snapshot</CardTitle></CardHeader>
@@ -947,7 +1142,9 @@ export default function CampaignDetail() {
             </div>
           ) : (
             <div className="space-y-2">
-              {steps?.map((step, idx) => (
+              {steps?.map((step, idx) => {
+                const reportStep = variantReport?.steps.find((item) => item.id === step.id);
+                return (
                 <div key={step.id}>
                   {idx > 0 && (
                     <button
@@ -983,6 +1180,16 @@ export default function CampaignDetail() {
                                 ? "Day 0 — sent when campaign launches"
                                 : `Sent ${step.delayDays} day${step.delayDays !== 1 ? "s" : ""} after step ${idx}`}
                             </p>
+                            {reportStep?.variants.length ? (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                <Badge variant="outline" className="text-[10px]">A/B step</Badge>
+                                {reportStep.variants.map((variant) => (
+                                  <Badge key={variant.id} variant="secondary" className="text-[10px]">
+                                    {variant.name}: {variant.sent} sent / {variant.replyRate}% replies
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : null}
                             <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
                               {step.bodyType === "html"
                                 ? step.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
@@ -1005,7 +1212,8 @@ export default function CampaignDetail() {
                     </CardContent>
                   </Card>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </TabsContent>
@@ -1121,7 +1329,10 @@ export default function CampaignDetail() {
                       <TableCell>{open.name ?? "—"}</TableCell>
                       <TableCell>{open.company ?? "—"}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className="capitalize">{open.source}</Badge>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="secondary" className="capitalize">{open.source}</Badge>
+                          {variantBadge((open as any).variantName)}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right text-sm text-muted-foreground">
                         {new Date(open.openedAt).toLocaleString()}
@@ -1162,6 +1373,7 @@ export default function CampaignDetail() {
                       <TableCell>{reply.company ?? "—"}</TableCell>
                       <TableCell className="max-w-md">
                         <p className="font-medium truncate">{reply.subject ?? "Reply"}</p>
+                        {variantBadge((reply as any).variantName)}
                         {reply.body && (
                           <p className="text-xs text-muted-foreground line-clamp-2">
                             {reply.body.replace(/\s+/g, " ").trim()}
@@ -1238,6 +1450,7 @@ export default function CampaignDetail() {
                                       <p className="text-xs text-muted-foreground">
                                         {[click.name, click.company].filter(Boolean).join(" • ") || "No lead details"}
                                       </p>
+                                      {variantBadge((click as any).variantName)}
                                     </div>
                                     <span className="text-xs text-muted-foreground">
                                       {click.clickedAt ? new Date(click.clickedAt).toLocaleString() : "—"}

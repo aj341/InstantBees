@@ -54,6 +54,10 @@ function followUpScheduledTime(previousStepAt: Date, delayDays: number, campaign
   return nextSendWindowAt(new Date(previousStepAt.getTime() + delayDays * DAY_MS), campaign);
 }
 
+function percent(part: number, total: number): number {
+  return total > 0 ? Math.round((part / total) * 1000) / 10 : 0;
+}
+
 function scheduledTimesForLead(
   baseTime: number,
   leadIndex: number,
@@ -388,8 +392,11 @@ router.get("/campaigns/:id/link-clicks", async (req, res): Promise<void> => {
       lastName: leadsTable.lastName,
       company: leadsTable.company,
       clickedAt: clickEventsTable.clickedAt,
+      variantId: emailSendJobsTable.variantId,
+      variantName: emailSendJobsTable.variantName,
     })
     .from(clickEventsTable)
+    .leftJoin(emailSendJobsTable, eq(clickEventsTable.sendJobId, emailSendJobsTable.id))
     .leftJoin(leadsTable, eq(clickEventsTable.leadId, leadsTable.id))
     .where(eq(clickEventsTable.campaignId, cid))
     .orderBy(desc(clickEventsTable.clickedAt));
@@ -410,10 +417,132 @@ router.get("/campaigns/:id/link-clicks", async (req, res): Promise<void> => {
         email: click.leadEmail,
         name: [click.firstName, click.lastName].filter(Boolean).join(" ") || null,
         company: click.company,
+        variantId: click.variantId,
+        variantName: click.variantName,
         clickedAt: click.clickedAt ? new Date(click.clickedAt).toISOString() : null,
       })),
     })),
   );
+});
+
+router.get("/campaigns/:id/variants", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const cid = parseInt(raw, 10);
+  if (!Number.isFinite(cid)) {
+    res.status(400).json({ error: "Invalid campaign id" });
+    return;
+  }
+
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, cid));
+  if (!campaign) {
+    res.status(404).json({ error: "Campaign not found" });
+    return;
+  }
+
+  const [steps, variants, jobs, clicks, messages] = await Promise.all([
+    db.select().from(sequenceStepsTable).where(eq(sequenceStepsTable.campaignId, cid)).orderBy(asc(sequenceStepsTable.stepNumber)),
+    db
+      .select({ variant: sequenceStepVariantsTable })
+      .from(sequenceStepVariantsTable)
+      .innerJoin(sequenceStepsTable, eq(sequenceStepVariantsTable.stepId, sequenceStepsTable.id))
+      .where(eq(sequenceStepsTable.campaignId, cid))
+      .orderBy(asc(sequenceStepsTable.stepNumber), desc(sequenceStepVariantsTable.priority), asc(sequenceStepVariantsTable.id)),
+    db.select().from(emailSendJobsTable).where(eq(emailSendJobsTable.campaignId, cid)),
+    db.select().from(clickEventsTable).where(eq(clickEventsTable.campaignId, cid)),
+    db.select().from(inboxMessagesTable).where(eq(inboxMessagesTable.campaignId, cid)),
+  ]);
+
+  const clicksByJobId = new Map<number, number>();
+  for (const click of clicks) {
+    clicksByJobId.set(click.sendJobId, (clicksByJobId.get(click.sendJobId) ?? 0) + 1);
+  }
+
+  const messagesByLeadId = new Map<number, typeof messages[number][]>();
+  for (const message of messages) {
+    if (!message.leadId) continue;
+    const list = messagesByLeadId.get(message.leadId) ?? [];
+    list.push(message);
+    messagesByLeadId.set(message.leadId, list);
+  }
+
+  const statsForJobs = (variantJobs: typeof jobs): {
+    sent: number;
+    pending: number;
+    failed: number;
+    skipped: number;
+    opened: number;
+    clicked: number;
+    totalClicks: number;
+    replied: number;
+    bounced: number;
+    positiveReplies: number;
+    openRate: number;
+    clickRate: number;
+    replyRate: number;
+    bounceRate: number;
+  } => {
+    const sent = variantJobs.filter((job) => job.status === "sent").length;
+    const clickedLeadIds = new Set<number>();
+    let totalClicks = 0;
+    let positiveReplies = 0;
+    for (const job of variantJobs) {
+      const jobClicks = clicksByJobId.get(job.id) ?? 0;
+      totalClicks += jobClicks;
+      if (jobClicks > 0 || job.firstClickedAt) clickedLeadIds.add(job.leadId);
+      const replies = messagesByLeadId.get(job.leadId) ?? [];
+      if (replies.some((reply) => reply.sentiment === "positive")) positiveReplies += 1;
+    }
+    return {
+      sent,
+      pending: variantJobs.filter((job) => job.status === "pending" || job.status === "in_progress").length,
+      failed: variantJobs.filter((job) => job.status === "failed").length,
+      skipped: variantJobs.filter((job) => job.status === "skipped").length,
+      opened: variantJobs.filter((job) => !!job.firstOpenedAt || !!job.firstClickedAt || !!job.repliedAt).length,
+      clicked: clickedLeadIds.size,
+      totalClicks,
+      replied: variantJobs.filter((job) => !!job.repliedAt).length,
+      bounced: variantJobs.filter((job) => !!job.bounceKind).length,
+      positiveReplies,
+      openRate: percent(variantJobs.filter((job) => !!job.firstOpenedAt || !!job.firstClickedAt || !!job.repliedAt).length, sent),
+      clickRate: percent(clickedLeadIds.size, sent),
+      replyRate: percent(variantJobs.filter((job) => !!job.repliedAt).length, sent),
+      bounceRate: percent(variantJobs.filter((job) => !!job.bounceKind).length, sent),
+    };
+  };
+
+  const variantRows = variants.map(({ variant }) => {
+    const variantJobs = jobs.filter((job) => job.stepId === variant.stepId && job.variantId === variant.id);
+    return {
+      id: variant.id,
+      stepId: variant.stepId,
+      labelId: variant.labelId,
+      name: variant.name,
+      subject: variant.subject,
+      previewText: variant.previewText,
+      body: variant.body,
+      bodyType: variant.bodyType,
+      attachmentsJson: variant.attachmentsJson,
+      priority: variant.priority,
+      ...statsForJobs(variantJobs),
+    };
+  });
+
+  const stepsOut = steps.map((step) => {
+    const stepJobs = jobs.filter((job) => job.stepId === step.id);
+    const defaultJobs = stepJobs.filter((job) => !job.variantId);
+    return {
+      id: step.id,
+      stepNumber: step.stepNumber,
+      subject: step.subject,
+      body: step.body,
+      bodyType: step.bodyType,
+      previewText: step.previewText,
+      defaultStats: statsForJobs(defaultJobs),
+      variants: variantRows.filter((variant) => variant.stepId === step.id),
+    };
+  });
+
+  res.json({ campaignId: cid, steps: stepsOut });
 });
 
 router.get("/campaigns/:id/opens", async (req, res): Promise<void> => {
@@ -435,6 +564,8 @@ router.get("/campaigns/:id/opens", async (req, res): Promise<void> => {
       firstOpenedAt: emailSendJobsTable.firstOpenedAt,
       firstClickedAt: emailSendJobsTable.firstClickedAt,
       repliedAt: emailSendJobsTable.repliedAt,
+      variantId: emailSendJobsTable.variantId,
+      variantName: emailSendJobsTable.variantName,
     })
     .from(emailSendJobsTable)
     .leftJoin(leadsTable, eq(emailSendJobsTable.leadId, leadsTable.id))
@@ -450,6 +581,8 @@ router.get("/campaigns/:id/opens", async (req, res): Promise<void> => {
         email: row.email,
         name: [row.firstName, row.lastName].filter(Boolean).join(" ") || null,
         company: row.company,
+        variantId: row.variantId,
+        variantName: row.variantName,
         openedAt: openedAt.toISOString(),
         source,
       };
@@ -476,6 +609,8 @@ router.get("/campaigns/:id/replies", async (req, res): Promise<void> => {
       lastName: leadsTable.lastName,
       company: leadsTable.company,
       repliedAt: emailSendJobsTable.repliedAt,
+      variantId: emailSendJobsTable.variantId,
+      variantName: emailSendJobsTable.variantName,
     })
     .from(emailSendJobsTable)
     .leftJoin(leadsTable, eq(emailSendJobsTable.leadId, leadsTable.id))
@@ -502,6 +637,8 @@ router.get("/campaigns/:id/replies", async (req, res): Promise<void> => {
         email: job.email,
         name: [job.firstName, job.lastName].filter(Boolean).join(" ") || null,
         company: job.company,
+        variantId: job.variantId,
+        variantName: job.variantName,
         repliedAt: job.repliedAt ? job.repliedAt.toISOString() : null,
         subject: message?.subject ?? null,
         body: message?.body ?? null,
