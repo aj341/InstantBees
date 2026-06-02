@@ -1,5 +1,6 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
+import { lookup } from "node:dns/promises";
 import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import {
   campaignsTable,
@@ -104,12 +105,17 @@ async function pollAccount(account: typeof emailAccountsTable.$inferSelect): Pro
   const imap = resolveImap(account);
   if (!imap) return;
 
+  const resolvedHost = process.env["IMAP_FORCE_IPV4"] === "0"
+    ? { host: imap.host, servername: imap.host }
+    : { host: (await lookup(imap.host, { family: 4 })).address, servername: imap.host };
+
   const client = new ImapFlow({
-    host: imap.host,
+    host: resolvedHost.host,
     port: imap.port,
     secure: imap.port === 993,
     family: 4,
     auth: { user: imap.username, pass: imap.password },
+    tls: { servername: resolvedHost.servername },
     logger: false,
   });
   client.on("error", (err) => {
