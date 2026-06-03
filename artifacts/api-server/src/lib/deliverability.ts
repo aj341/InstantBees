@@ -247,6 +247,13 @@ export function buildDeliverabilityOverview(input: {
     const bounceRate = rate(bounced, sent);
     const replyRate = rate(replied, sent);
     const errorRate = rate(failed, Math.max(1, accountJobs.length));
+    const lastSuccessfulSendAt = accountJobs
+      .filter((job) => sentLike(job) && job.sentAt)
+      .map((job) => job.sentAt as Date)
+      .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+    const hasRecentSuccessfulSend = !!lastSuccessfulSendAt && Date.now() - lastSuccessfulSendAt.getTime() < 7 * 24 * 60 * 60 * 1000;
+    const activeLastError = account.lastError && !hasRecentSuccessfulSend ? account.lastError : null;
+    const mailboxAtRisk = account.status === "error" || !!activeLastError || bounceRate >= 5;
     return {
       id: account.id,
       email: account.email,
@@ -271,10 +278,10 @@ export function buildDeliverabilityOverview(input: {
       bounceRate,
       errorRate,
       lastPolledAt: toIso(account.lastPolledAt),
-      lastError: account.lastError,
+      lastError: activeLastError,
       hasSmtp: !!account.smtpPasswordEnc,
       hasImap: !!account.imapHost,
-      severity: account.status === "error" || !!account.lastError || bounceRate >= 5 ? "risk" : riskForRates(bounceRate, replyRate, errorRate),
+      severity: mailboxAtRisk ? "risk" : riskForRates(bounceRate, replyRate, errorRate),
     };
   });
 

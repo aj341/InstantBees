@@ -36,6 +36,46 @@ function isBounce(fromEmail: string, subject: string, body: string): boolean {
   return classifyReply({ fromEmail, subject, body }).category === "bounce";
 }
 
+async function skipPendingJobsForLead(campaignId: number, leadId: number, reason: string): Promise<void> {
+  await db
+    .update(emailSendJobsTable)
+    .set({ status: "skipped", errorMessage: reason })
+    .where(and(
+      eq(emailSendJobsTable.campaignId, campaignId),
+      eq(emailSendJobsTable.leadId, leadId),
+      inArray(emailSendJobsTable.status, ["pending", "in_progress"]),
+    ));
+}
+
+async function reconcileTerminalLeadJobs(): Promise<void> {
+  await db
+    .update(emailSendJobsTable)
+    .set({ status: "skipped", errorMessage: "Lead already replied" })
+    .where(sql`
+      status in ('pending', 'in_progress')
+      and exists (
+        select 1
+        from email_send_jobs sent_job
+        where sent_job.campaign_id = email_send_jobs.campaign_id
+          and sent_job.lead_id = email_send_jobs.lead_id
+          and sent_job.replied_at is not null
+      )
+    `);
+
+  await db
+    .update(emailSendJobsTable)
+    .set({ status: "skipped", errorMessage: "Lead is no longer active" })
+    .where(sql`
+      status in ('pending', 'in_progress')
+      and exists (
+        select 1
+        from leads
+        where leads.id = email_send_jobs.lead_id
+          and leads.status in ('replied', 'bounced', 'unsubscribed')
+      )
+    `);
+}
+
 async function markReply(jobId: number, receivedAt: Date): Promise<void> {
   const [job] = await db.select().from(emailSendJobsTable).where(eq(emailSendJobsTable.id, jobId));
   if (!job) return;
@@ -50,6 +90,7 @@ async function markReply(jobId: number, receivedAt: Date): Promise<void> {
     await db.update(campaignsTable).set({ replyCount: sql`${campaignsTable.replyCount} + 1` }).where(eq(campaignsTable.id, job.campaignId));
     await db.update(leadsTable).set({ status: "replied" }).where(eq(leadsTable.id, job.leadId));
   }
+  await skipPendingJobsForLead(job.campaignId, job.leadId, "Lead already replied");
 }
 
 async function markBounce(jobId: number, receivedAt: Date): Promise<void> {
@@ -66,6 +107,7 @@ async function markBounce(jobId: number, receivedAt: Date): Promise<void> {
     await db.update(campaignsTable).set({ bounceCount: sql`${campaignsTable.bounceCount} + 1` }).where(eq(campaignsTable.id, job.campaignId));
     await db.update(leadsTable).set({ status: "bounced" }).where(eq(leadsTable.id, job.leadId));
   }
+  await skipPendingJobsForLead(job.campaignId, job.leadId, "Lead bounced");
 }
 
 async function findJobForMessage(parsed: Awaited<ReturnType<typeof simpleParser>>, fromEmail: string, body: string): Promise<typeof emailSendJobsTable.$inferSelect | null> {
@@ -212,6 +254,7 @@ async function pollOnce(): Promise<void> {
 
 export function startInboxWorker(): void {
   if (timer) return;
+  void reconcileTerminalLeadJobs();
   void pollOnce();
   timer = setInterval(() => void pollOnce(), POLL_INTERVAL_MS);
   logger.info({ intervalMs: POLL_INTERVAL_MS }, "Starting inbox reply/bounce worker");
