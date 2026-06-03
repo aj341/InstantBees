@@ -284,6 +284,27 @@ const inboxColumnNames = new Set(inboxColumns.map((column) => column.name));
 if (!inboxColumnNames.has("category")) {
   sqlite.exec("ALTER TABLE inbox_messages ADD COLUMN category TEXT");
 }
+sqlite.exec(`
+UPDATE inbox_messages
+SET sentiment = 'negative', category = 'bounce'
+WHERE lower(coalesce(subject, '')) LIKE '%no longer in use%'
+   OR lower(coalesce(body, '')) LIKE '%no longer in use%'
+   OR lower(coalesce(body, '')) LIKE '%no longer monitored%'
+   OR lower(coalesce(body, '')) LIKE '%mailbox is not monitored%'
+   OR lower(coalesce(body, '')) LIKE '%email address is no longer monitored%'
+`);
+sqlite.exec(`
+UPDATE inbox_messages
+SET sentiment = 'neutral', category = 'out_of_office'
+WHERE lower(coalesce(subject, '')) LIKE '%out of office%'
+   OR lower(coalesce(subject, '')) LIKE '%automatic repl%'
+   OR lower(coalesce(subject, '')) LIKE '%auto-repl%'
+   OR lower(coalesce(body, '')) LIKE '%out of office%'
+   OR lower(coalesce(body, '')) LIKE '%automatic repl%'
+   OR lower(coalesce(body, '')) LIKE '%auto-repl%'
+   OR lower(coalesce(body, '')) LIKE '%currently away%'
+   OR lower(coalesce(body, '')) LIKE '%away from the office%'
+`);
 
 const templateColumns = sqlite.prepare("PRAGMA table_info(email_templates)").all() as Array<{ name: string }>;
 const templateColumnNames = new Set(templateColumns.map((column) => column.name));
@@ -360,6 +381,33 @@ if (!leadColumnNames.has("role_title")) {
 if (!leadColumnNames.has("custom_fields_json")) {
   sqlite.exec("ALTER TABLE leads ADD COLUMN custom_fields_json TEXT");
 }
+sqlite.exec(`
+UPDATE leads
+SET status = 'bounced'
+WHERE id IN (
+  SELECT lead_id
+  FROM inbox_messages
+  WHERE category = 'bounce'
+    AND lead_id IS NOT NULL
+)
+OR lower(email) IN (
+  SELECT lower(from_email)
+  FROM inbox_messages
+  WHERE category = 'bounce'
+    AND from_email IS NOT NULL
+)
+`);
+sqlite.exec(`
+UPDATE email_send_jobs
+SET status = 'skipped',
+    error_message = 'Lead removed from sequence after terminal reply'
+WHERE status IN ('pending', 'scheduled', 'queued')
+  AND lead_id IN (
+    SELECT id
+    FROM leads
+    WHERE status = 'bounced'
+  )
+`);
 
 const accountColumns = sqlite.prepare("PRAGMA table_info(email_accounts)").all() as Array<{ name: string }>;
 const accountColumnNames = new Set(accountColumns.map((column) => column.name));
