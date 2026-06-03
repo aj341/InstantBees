@@ -712,11 +712,11 @@ export default function CampaignDetail() {
                     </div>
                   ))}
                 </div>
-                {campaignContentRisks.some((risk) => risk.severity !== "good") && (
+                {campaignContentRisks.some((risk) => risk.severity === "risk") && (
                   <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
                     <p className="text-sm font-medium">Content items to review</p>
                     <div className="mt-2 grid gap-2 md:grid-cols-2">
-                      {campaignContentRisks.filter((risk) => risk.severity !== "good").map((risk) => (
+                      {campaignContentRisks.filter((risk) => risk.severity === "risk").map((risk) => (
                         <div key={risk.stepId} className="rounded border border-border bg-background/60 p-2 text-xs">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium">Step {risk.stepNumber}</span>

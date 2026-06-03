@@ -302,7 +302,7 @@ export function buildDeliverabilityOverview(input: {
     const campaignSent = campaignJobs.filter(sentLike);
     const campaignSteps = stepsByCampaignId.get(campaign.id) ?? [];
     const campaignLeads = campaign.leadsCount ?? 0;
-    const campaignRiskSteps = contentRisks.filter((risk) => risk.campaignId === campaign.id && risk.severity !== "good");
+    const campaignRiskSteps = contentRisks.filter((risk) => risk.campaignId === campaign.id && risk.severity === "risk");
     const checks = [
       { label: "Sequence steps", ok: campaignSteps.length > 0, detail: `${campaignSteps.length} steps` },
       { label: "Active leads", ok: campaignLeads > 0, detail: `${campaignLeads} leads` },
