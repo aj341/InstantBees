@@ -3,6 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 export const sentimentValues = ["positive", "neutral", "negative"] as const;
+export const replyCategoryValues = ["interested", "not_interested", "out_of_office", "referral", "objection", "bounce", "neutral"] as const;
 
 export const inboxMessagesTable = sqliteTable("inbox_messages", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -14,6 +15,7 @@ export const inboxMessagesTable = sqliteTable("inbox_messages", {
   isArchived: integer("is_archived", { mode: "boolean" }).notNull().default(false),
   isFavorite: integer("is_favorite", { mode: "boolean" }).notNull().default(false),
   sentiment: text("sentiment", { enum: sentimentValues }),
+  category: text("category", { enum: replyCategoryValues }),
   campaignId: integer("campaign_id"),
   leadId: integer("lead_id"),
   receivedAt: integer("received_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),

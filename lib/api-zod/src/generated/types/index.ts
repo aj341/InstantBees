@@ -33,6 +33,7 @@ export * from './emailTemplate';
 export * from './emailTemplateBodyType';
 export * from './healthStatus';
 export * from './inboxMessage';
+export * from './inboxMessageCategory';
 export * from './inboxMessageSentiment';
 export * from './inboxMessageUpdate';
 export * from './label';

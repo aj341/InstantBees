@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { InboxMessageSentiment } from './inboxMessageSentiment';
+import type { InboxMessageCategory } from './inboxMessageCategory';
 
 export interface InboxMessage {
   id: number;
@@ -19,6 +20,8 @@ export interface InboxMessage {
   isFavorite?: boolean;
   /** @nullable */
   sentiment?: InboxMessageSentiment;
+  /** @nullable */
+  category?: InboxMessageCategory;
   /** @nullable */
   campaignId: number | null;
   /** @nullable */

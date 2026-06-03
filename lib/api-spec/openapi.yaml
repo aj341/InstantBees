@@ -1149,6 +1149,12 @@ components:
           type: ["string", "null"]
         body:
           type: ["string", "null"]
+        sentiment:
+          type: ["string", "null"]
+          enum: ["positive", "neutral", "negative", null]
+        category:
+          type: ["string", "null"]
+          enum: ["interested", "not_interested", "out_of_office", "referral", "objection", "bounce", "neutral", null]
 
     CampaignStatsOverview:
       type: object
@@ -1670,6 +1676,9 @@ components:
         sentiment:
           type: ["string", "null"]
           enum: ["positive", "neutral", "negative", null]
+        category:
+          type: ["string", "null"]
+          enum: ["interested", "not_interested", "out_of_office", "referral", "objection", "bounce", "neutral", null]
         campaignId:
           type: ["integer", "null"]
         leadId:

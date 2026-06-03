@@ -366,7 +366,9 @@ export const GetCampaignRepliesResponseItem = zod.object({
   "company": zod.string().nullable(),
   "repliedAt": zod.string().nullable(),
   "subject": zod.string().nullable(),
-  "body": zod.string().nullable()
+  "body": zod.string().nullable(),
+  "sentiment": zod.union([zod.literal('positive'),zod.literal('neutral'),zod.literal('negative'),zod.literal(null)]).nullish(),
+  "category": zod.union([zod.literal('interested'),zod.literal('not_interested'),zod.literal('out_of_office'),zod.literal('referral'),zod.literal('objection'),zod.literal('bounce'),zod.literal('neutral'),zod.literal(null)]).nullish()
 })
 export const GetCampaignRepliesResponse = zod.array(GetCampaignRepliesResponseItem)
 
@@ -819,6 +821,7 @@ export const ListInboxMessagesResponseItem = zod.object({
   "isArchived": zod.boolean(),
   "isFavorite": zod.boolean().optional(),
   "sentiment": zod.union([zod.literal('positive'),zod.literal('neutral'),zod.literal('negative'),zod.literal(null)]).nullish(),
+  "category": zod.union([zod.literal('interested'),zod.literal('not_interested'),zod.literal('out_of_office'),zod.literal('referral'),zod.literal('objection'),zod.literal('bounce'),zod.literal('neutral'),zod.literal(null)]).nullish(),
   "campaignId": zod.number().nullable(),
   "leadId": zod.number().nullable(),
   "receivedAt": zod.string()
@@ -843,6 +846,7 @@ export const GetInboxMessageResponse = zod.object({
   "isArchived": zod.boolean(),
   "isFavorite": zod.boolean().optional(),
   "sentiment": zod.union([zod.literal('positive'),zod.literal('neutral'),zod.literal('negative'),zod.literal(null)]).nullish(),
+  "category": zod.union([zod.literal('interested'),zod.literal('not_interested'),zod.literal('out_of_office'),zod.literal('referral'),zod.literal('objection'),zod.literal('bounce'),zod.literal('neutral'),zod.literal(null)]).nullish(),
   "campaignId": zod.number().nullable(),
   "leadId": zod.number().nullable(),
   "receivedAt": zod.string()
@@ -872,6 +876,7 @@ export const UpdateInboxMessageResponse = zod.object({
   "isArchived": zod.boolean(),
   "isFavorite": zod.boolean().optional(),
   "sentiment": zod.union([zod.literal('positive'),zod.literal('neutral'),zod.literal('negative'),zod.literal(null)]).nullish(),
+  "category": zod.union([zod.literal('interested'),zod.literal('not_interested'),zod.literal('out_of_office'),zod.literal('referral'),zod.literal('objection'),zod.literal('bounce'),zod.literal('neutral'),zod.literal(null)]).nullish(),
   "campaignId": zod.number().nullable(),
   "leadId": zod.number().nullable(),
   "receivedAt": zod.string()

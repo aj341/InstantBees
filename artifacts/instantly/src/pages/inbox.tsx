@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Archive, Star, Circle, CheckCircle, Inbox as InboxIcon, TrendingUp, Minus, TrendingDown, Search } from "lucide-react";
+import { Archive, Star, Circle, CheckCircle, Inbox as InboxIcon, TrendingUp, Minus, TrendingDown, Search, Clock } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 
@@ -16,10 +16,32 @@ const SENTIMENT_CONFIG = {
   negative: { label: "Negative", icon: TrendingDown, className: "text-destructive" },
 };
 
+const CATEGORY_CONFIG = {
+  out_of_office: { label: "Out of office", icon: Clock, className: "text-amber-400" },
+  interested: SENTIMENT_CONFIG.positive,
+  referral: { label: "Referral", icon: TrendingUp, className: "text-green-500" },
+  objection: { label: "Objection", icon: Minus, className: "text-muted-foreground" },
+  not_interested: { label: "Not interested", icon: TrendingDown, className: "text-destructive" },
+  bounce: { label: "Bounce", icon: TrendingDown, className: "text-destructive" },
+  neutral: SENTIMENT_CONFIG.neutral,
+};
+
+type ReplyFilter = "all" | "positive" | "neutral" | "negative" | "out_of_office";
+
+function replyDisplay(message: { sentiment?: string | null; category?: string | null }) {
+  if (message.category && message.category in CATEGORY_CONFIG) {
+    return CATEGORY_CONFIG[message.category as keyof typeof CATEGORY_CONFIG];
+  }
+  if (message.sentiment && message.sentiment in SENTIMENT_CONFIG) {
+    return SENTIMENT_CONFIG[message.sentiment as keyof typeof SENTIMENT_CONFIG];
+  }
+  return null;
+}
+
 export default function Inbox() {
   const [selected, setSelected] = useState<number | null>(null);
   const [query, setQuery] = useState("");
-  const [sentimentFilter, setSentimentFilter] = useState<"all" | "positive" | "neutral" | "negative">("all");
+  const [replyFilter, setReplyFilter] = useState<ReplyFilter>("all");
   const queryClient = useQueryClient();
   const { data: messages, isLoading } = useListInboxMessages();
 
@@ -33,13 +55,15 @@ export default function Inbox() {
   const selectedMsg = messages?.find(m => m.id === selected);
   const unreadCount = messages?.filter(m => !m.isRead).length ?? 0;
   const positiveCount = messages?.filter(m => m.sentiment === "positive").length ?? 0;
-  const neutralCount = messages?.filter(m => m.sentiment === "neutral").length ?? 0;
+  const outOfOfficeCount = messages?.filter(m => m.category === "out_of_office").length ?? 0;
+  const neutralCount = messages?.filter(m => m.sentiment === "neutral" && m.category !== "out_of_office").length ?? 0;
   const negativeCount = messages?.filter(m => m.sentiment === "negative").length ?? 0;
   const filteredMessages = messages?.filter((msg) => {
     const haystack = `${msg.fromName ?? ""} ${msg.fromEmail ?? ""} ${msg.subject ?? ""} ${msg.body ?? ""}`.toLowerCase();
     const matchesQuery = !query.trim() || haystack.includes(query.trim().toLowerCase());
-    const matchesSentiment = sentimentFilter === "all" || msg.sentiment === sentimentFilter;
-    return matchesQuery && matchesSentiment;
+    const matchesReplyFilter = replyFilter === "all"
+      || (replyFilter === "out_of_office" ? msg.category === "out_of_office" : msg.sentiment === replyFilter && msg.category !== "out_of_office");
+    return matchesQuery && matchesReplyFilter;
   });
 
   function markRead(id: number) {
@@ -67,7 +91,7 @@ export default function Inbox() {
               <Badge variant="default" data-testid="badge-unread-count">{unreadCount} unread</Badge>
             )}
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             <Card className="bg-muted/30">
               <CardContent className="p-3">
                 <p className="text-xs text-muted-foreground">Positive</p>
@@ -78,6 +102,12 @@ export default function Inbox() {
               <CardContent className="p-3">
                 <p className="text-xs text-muted-foreground">Neutral</p>
                 <p className="text-lg font-bold">{neutralCount}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-muted/30">
+              <CardContent className="p-3">
+                <p className="text-xs text-muted-foreground">OOO</p>
+                <p className="text-lg font-bold text-amber-400">{outOfOfficeCount}</p>
               </CardContent>
             </Card>
             <Card className="bg-muted/30">
@@ -98,16 +128,16 @@ export default function Inbox() {
             />
           </div>
           <div className="flex flex-wrap gap-2">
-            {(["all", "positive", "neutral", "negative"] as const).map((value) => (
+            {(["all", "positive", "neutral", "out_of_office", "negative"] as const).map((value) => (
               <Button
                 key={value}
                 type="button"
-                variant={sentimentFilter === value ? "default" : "outline"}
+                variant={replyFilter === value ? "default" : "outline"}
                 size="sm"
                 className="capitalize"
-                onClick={() => setSentimentFilter(value)}
+                onClick={() => setReplyFilter(value)}
               >
-                {value}
+                {value === "out_of_office" ? "Out of office" : value}
               </Button>
             ))}
           </div>
@@ -144,8 +174,9 @@ export default function Inbox() {
                 {msg.subject}
               </p>
               <div className="flex items-center gap-2">
-                {msg.sentiment && SENTIMENT_CONFIG[msg.sentiment] && (() => {
-                  const config = SENTIMENT_CONFIG[msg.sentiment as keyof typeof SENTIMENT_CONFIG];
+                {(() => {
+                  const config = replyDisplay(msg);
+                  if (!config) return null;
                   const Icon = config.icon;
                   return (
                     <span className={cn("flex items-center gap-1 text-xs", config.className)}>
@@ -201,13 +232,14 @@ export default function Inbox() {
             </div>
             <div className="p-6 flex-1 overflow-y-auto">
               <h2 className="text-xl font-bold mb-4">{selectedMsg.subject}</h2>
-              {selectedMsg.sentiment && SENTIMENT_CONFIG[selectedMsg.sentiment as keyof typeof SENTIMENT_CONFIG] && (() => {
-                const config = SENTIMENT_CONFIG[selectedMsg.sentiment as keyof typeof SENTIMENT_CONFIG];
+              {(() => {
+                const config = replyDisplay(selectedMsg);
+                if (!config) return null;
                 const Icon = config.icon;
                 return (
                   <div className={cn("flex items-center gap-1.5 mb-4 text-sm", config.className)}>
                     <Icon className="h-4 w-4" />
-                    <span>{config.label} sentiment</span>
+                    <span>{selectedMsg.category === "out_of_office" ? config.label : `${config.label} sentiment`}</span>
                   </div>
                 );
               })()}

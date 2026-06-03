@@ -287,13 +287,19 @@ export function buildDeliverabilityOverview(input: {
 
   const contentRisks = steps.map((step) => {
     const campaign = campaignsById.get(step.campaignId);
+    const rawRisk = contentRiskForStep(step);
+    const reviewed = !!step.contentReviewedAt;
     return {
       campaignId: step.campaignId,
       campaignName: campaign?.name ?? "Unknown campaign",
       stepId: step.id,
       stepNumber: step.stepNumber,
       subject: step.subject,
-      ...contentRiskForStep(step),
+      ...rawRisk,
+      originalSeverity: rawRisk.severity,
+      severity: reviewed ? "good" : rawRisk.severity,
+      reviewed,
+      reviewedAt: toIso(step.contentReviewedAt),
     };
   }).sort((a, b) => b.score - a.score);
 

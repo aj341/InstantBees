@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS campaigns (
   from_name TEXT,
   reply_to TEXT,
   daily_limit INTEGER,
-  batch_size INTEGER NOT NULL DEFAULT 25,
-  batch_interval_minutes INTEGER NOT NULL DEFAULT 60,
+  batch_size INTEGER NOT NULL DEFAULT 16,
+  batch_interval_minutes INTEGER NOT NULL DEFAULT 65,
   send_window_start TEXT NOT NULL DEFAULT '07:00',
   send_window_end TEXT NOT NULL DEFAULT '19:00',
   send_window_timezone TEXT NOT NULL DEFAULT 'Australia/Sydney',
@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS sequence_steps (
   body_type TEXT NOT NULL DEFAULT 'text',
   attachments_json TEXT,
   delay_days INTEGER NOT NULL DEFAULT 0,
+  content_reviewed_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (${nowMsSql})
 );
 
@@ -139,6 +140,7 @@ CREATE TABLE IF NOT EXISTS inbox_messages (
   is_archived INTEGER NOT NULL DEFAULT 0,
   is_favorite INTEGER NOT NULL DEFAULT 0,
   sentiment TEXT,
+  category TEXT,
   campaign_id INTEGER,
   lead_id INTEGER,
   received_at INTEGER NOT NULL DEFAULT (${nowMsSql})
@@ -259,10 +261,10 @@ CREATE INDEX IF NOT EXISTS IDX_user_sessions_expire ON user_sessions(expire);
 const campaignColumns = sqlite.prepare("PRAGMA table_info(campaigns)").all() as Array<{ name: string }>;
 const campaignColumnNames = new Set(campaignColumns.map((column) => column.name));
 if (!campaignColumnNames.has("batch_size")) {
-  sqlite.exec("ALTER TABLE campaigns ADD COLUMN batch_size INTEGER NOT NULL DEFAULT 25");
+  sqlite.exec("ALTER TABLE campaigns ADD COLUMN batch_size INTEGER NOT NULL DEFAULT 16");
 }
 if (!campaignColumnNames.has("batch_interval_minutes")) {
-  sqlite.exec("ALTER TABLE campaigns ADD COLUMN batch_interval_minutes INTEGER NOT NULL DEFAULT 60");
+  sqlite.exec("ALTER TABLE campaigns ADD COLUMN batch_interval_minutes INTEGER NOT NULL DEFAULT 65");
 }
 if (!campaignColumnNames.has("send_window_start")) {
   sqlite.exec("ALTER TABLE campaigns ADD COLUMN send_window_start TEXT NOT NULL DEFAULT '07:00'");
@@ -277,6 +279,12 @@ if (!campaignColumnNames.has("send_window_days")) {
   sqlite.exec("ALTER TABLE campaigns ADD COLUMN send_window_days TEXT NOT NULL DEFAULT 'mon,tue,wed,thu,fri'");
 }
 
+const inboxColumns = sqlite.prepare("PRAGMA table_info(inbox_messages)").all() as Array<{ name: string }>;
+const inboxColumnNames = new Set(inboxColumns.map((column) => column.name));
+if (!inboxColumnNames.has("category")) {
+  sqlite.exec("ALTER TABLE inbox_messages ADD COLUMN category TEXT");
+}
+
 const templateColumns = sqlite.prepare("PRAGMA table_info(email_templates)").all() as Array<{ name: string }>;
 const templateColumnNames = new Set(templateColumns.map((column) => column.name));
 if (!templateColumnNames.has("attachments_json")) {
@@ -287,6 +295,9 @@ const sequenceStepColumns = sqlite.prepare("PRAGMA table_info(sequence_steps)").
 const sequenceStepColumnNames = new Set(sequenceStepColumns.map((column) => column.name));
 if (!sequenceStepColumnNames.has("attachments_json")) {
   sqlite.exec("ALTER TABLE sequence_steps ADD COLUMN attachments_json TEXT");
+}
+if (!sequenceStepColumnNames.has("content_reviewed_at")) {
+  sqlite.exec("ALTER TABLE sequence_steps ADD COLUMN content_reviewed_at INTEGER");
 }
 
 const sequenceVariantColumns = sqlite.prepare("PRAGMA table_info(sequence_step_variants)").all() as Array<{ name: string }>;

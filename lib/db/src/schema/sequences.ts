@@ -13,6 +13,7 @@ export const sequenceStepsTable = sqliteTable("sequence_steps", {
   bodyType: text("body_type").notNull().default("text"),
   attachmentsJson: text("attachments_json"),
   delayDays: integer("delay_days").notNull().default(0),
+  contentReviewedAt: integer("content_reviewed_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 

@@ -143,6 +143,10 @@ export interface CampaignReplyRow {
   subject: string | null;
   /** @nullable */
   body: string | null;
+  /** @nullable */
+  sentiment?: InboxMessageSentiment;
+  /** @nullable */
+  category?: InboxMessageCategory;
 }
 
 export interface CampaignStatsOverview {
@@ -488,6 +492,22 @@ export const InboxMessageSentiment = {
   negative: 'negative',
 } as const;
 
+/**
+ * @nullable
+ */
+export type InboxMessageCategory = typeof InboxMessageCategory[keyof typeof InboxMessageCategory] | null;
+
+
+export const InboxMessageCategory = {
+  interested: 'interested',
+  not_interested: 'not_interested',
+  out_of_office: 'out_of_office',
+  referral: 'referral',
+  objection: 'objection',
+  bounce: 'bounce',
+  neutral: 'neutral',
+} as const;
+
 export interface InboxMessage {
   id: number;
   fromEmail: string;
@@ -500,6 +520,8 @@ export interface InboxMessage {
   isFavorite?: boolean;
   /** @nullable */
   sentiment?: InboxMessageSentiment;
+  /** @nullable */
+  category?: InboxMessageCategory;
   /** @nullable */
   campaignId: number | null;
   /** @nullable */

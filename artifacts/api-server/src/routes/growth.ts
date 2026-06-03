@@ -69,8 +69,8 @@ function clampPositiveInt(value: unknown, fallback: number): number {
 }
 
 function campaignBatchSettings(campaign: Pick<typeof campaignsTable.$inferSelect, "batchSize" | "batchIntervalMinutes">): { batchSize: number; batchIntervalMs: number; slotIntervalMs: number } {
-  const batchSize = clampPositiveInt(campaign.batchSize, 25);
-  const batchIntervalMs = clampPositiveInt(campaign.batchIntervalMinutes, 60) * 60_000;
+  const batchSize = clampPositiveInt(campaign.batchSize, 16);
+  const batchIntervalMs = clampPositiveInt(campaign.batchIntervalMinutes, 65) * 60_000;
   return {
     batchSize,
     batchIntervalMs,
@@ -338,7 +338,7 @@ router.get("/growth/overview", async (_req, res): Promise<void> => {
     const capacityDailySendRate = capacity.dailyCapacity;
     const hasSendHistory = totalSent > 0 || sentLast7Days > 0;
     const fallbackDailySendRate = hasSendHistory && capacityDailySendRate > 0
-      ? Math.min(capacityDailySendRate, Math.max(1, clampPositiveInt(campaign.batchSize, 25)))
+      ? Math.min(capacityDailySendRate, Math.max(1, clampPositiveInt(campaign.batchSize, 16)))
       : 0;
     const runwayDailySendRate = campaign.status === "active"
       ? (actualDailySendRate > 0 ? actualDailySendRate : fallbackDailySendRate)

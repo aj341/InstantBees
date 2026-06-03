@@ -35,7 +35,7 @@ import {
   getListAccountsQueryKey,
   getListLabelsQueryKey,
 } from "@workspace/api-client-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -275,6 +275,18 @@ export default function CampaignDetail() {
   const { data: campaignLeads } = useListCampaignLeads(id, { query: { enabled: !!id, queryKey: getListCampaignLeadsQueryKey(id) } });
   const { data: allLeads } = useListLeads();
   const { data: deliverability } = useQuery({ queryKey: ["deliverability-overview"], queryFn: fetchDeliverabilityOverview });
+  const reviewContentRisk = useMutation({
+    mutationFn: async (stepId: number) => {
+      const response = await fetch(`/api/deliverability/content-risks/${stepId}/review`, { method: "POST" });
+      if (!response.ok) throw new Error("Failed to mark content as reviewed");
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Content marked as reviewed" });
+      queryClient.invalidateQueries({ queryKey: ["deliverability-overview"] });
+    },
+    onError: () => toast({ title: "Failed to mark reviewed", variant: "destructive" }),
+  });
   const { data: variantReport } = useQuery<CampaignVariantReport>({
     queryKey: ["campaign-variants", id],
     enabled: !!id,
@@ -291,8 +303,8 @@ export default function CampaignDetail() {
 
   useEffect(() => {
     if (!campaign) return;
-    setBatchSizeInput(String(campaign.batchSize ?? 25));
-    setBatchIntervalInput(String(campaign.batchIntervalMinutes ?? 60));
+    setBatchSizeInput(String(campaign.batchSize ?? 16));
+    setBatchIntervalInput(String(campaign.batchIntervalMinutes ?? 65));
   }, [campaign]);
 
   useEffect(() => {
@@ -548,6 +560,18 @@ export default function CampaignDetail() {
   const variantBadge = (name?: string | null) => (
     name ? <Badge variant="outline" className="whitespace-nowrap text-[10px]">{name}</Badge> : null
   );
+  const replyCategoryBadge = (category?: string | null, sentiment?: string | null) => {
+    if (category === "out_of_office") {
+      return <Badge variant="outline" className="border-amber-400/40 text-amber-300">Out of office</Badge>;
+    }
+    if (category === "not_interested") return <Badge variant="destructive">Not interested</Badge>;
+    if (category === "bounce") return <Badge variant="destructive">Bounce</Badge>;
+    if (category === "referral") return <Badge variant="default">Referral</Badge>;
+    if (category === "objection") return <Badge variant="secondary">Objection</Badge>;
+    if (sentiment === "positive") return <Badge variant="default">Positive</Badge>;
+    if (sentiment === "negative") return <Badge variant="destructive">Negative</Badge>;
+    return <Badge variant="secondary">Neutral</Badge>;
+  };
 
   return (
     <div className="p-8 max-w-[1500px] mx-auto space-y-6">
@@ -712,17 +736,28 @@ export default function CampaignDetail() {
                     </div>
                   ))}
                 </div>
-                {campaignContentRisks.some((risk) => risk.severity === "risk") && (
+                {campaignContentRisks.some((risk) => (risk.originalSeverity ?? risk.severity) === "risk" && !risk.reviewed) && (
                   <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
                     <p className="text-sm font-medium">Content items to review</p>
                     <div className="mt-2 grid gap-2 md:grid-cols-2">
-                      {campaignContentRisks.filter((risk) => risk.severity === "risk").map((risk) => (
+                      {campaignContentRisks.filter((risk) => (risk.originalSeverity ?? risk.severity) === "risk" && !risk.reviewed).map((risk) => (
                         <div key={risk.stepId} className="rounded border border-border bg-background/60 p-2 text-xs">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium">Step {risk.stepNumber}</span>
-                            <Badge variant={severityVariant(risk.severity)}>{risk.score}</Badge>
+                            <Badge variant={severityVariant(risk.originalSeverity ?? risk.severity)}>{risk.score}</Badge>
                           </div>
                           <p className="mt-1 text-muted-foreground">{risk.issues.join(" · ")}</p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="mt-2 h-8"
+                            disabled={reviewContentRisk.isPending}
+                            onClick={() => reviewContentRisk.mutate(risk.stepId)}
+                            data-testid={`button-review-content-risk-${risk.stepId}`}
+                          >
+                            Mark reviewed
+                          </Button>
                         </div>
                       ))}
                     </div>
@@ -1423,7 +1458,10 @@ export default function CampaignDetail() {
                       <TableCell>{reply.company ?? "—"}</TableCell>
                       <TableCell className="max-w-md">
                         <p className="font-medium truncate">{reply.subject ?? "Reply"}</p>
-                        {variantBadge((reply as any).variantName)}
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {variantBadge((reply as any).variantName)}
+                          {replyCategoryBadge((reply as any).category, (reply as any).sentiment)}
+                        </div>
                         {reply.body && (
                           <p className="text-xs text-muted-foreground line-clamp-2">
                             {reply.body.replace(/\s+/g, " ").trim()}

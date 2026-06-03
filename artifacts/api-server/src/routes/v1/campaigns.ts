@@ -77,9 +77,28 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
 // POST /api/v1/campaigns/:id/start
 router.post("/campaigns/:id/start", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const [row] = await db.update(campaignsTable).set({ status: "active" }).where(eq(campaignsTable.id, id)).returning();
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: { code: "INVALID_INPUT", message: "Invalid campaign id" } });
+    return;
+  }
+
+  let enqueueResult: Awaited<ReturnType<typeof enqueueMissingCampaignJobs>>;
+  try {
+    enqueueResult = await enqueueMissingCampaignJobs(id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to queue campaign";
+    const code = message === "Campaign not found" ? "NOT_FOUND" : "INVALID_INPUT";
+    res.status(code === "NOT_FOUND" ? 404 : 400).json({ error: { code, message } });
+    return;
+  }
+
+  const [row] = await db
+    .update(campaignsTable)
+    .set({ status: "active", leadsCount: enqueueResult.activeLeadCount })
+    .where(eq(campaignsTable.id, id))
+    .returning();
   if (!row) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Campaign not found" } }); return; }
-  res.json({ id: row.id, status: row.status, message: "Campaign started" });
+  res.json({ id: row.id, status: row.status, jobsCreated: enqueueResult.jobsCreated, message: "Campaign started" });
 });
 
 // POST /api/v1/campaigns/:id/pause

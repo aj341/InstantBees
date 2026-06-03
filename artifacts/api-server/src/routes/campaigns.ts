@@ -28,8 +28,8 @@ function clampPositiveInt(value: unknown, fallback: number, max = 10_000): numbe
 
 function campaignBatchSettings(campaign: Pick<typeof campaignsTable.$inferSelect, "batchSize" | "batchIntervalMinutes">): { batchSize: number; batchIntervalMs: number } {
   return {
-    batchSize: clampPositiveInt(campaign.batchSize, 25),
-    batchIntervalMs: clampPositiveInt(campaign.batchIntervalMinutes, 60, 24 * 60) * 60 * 1000,
+    batchSize: clampPositiveInt(campaign.batchSize, 16),
+    batchIntervalMs: clampPositiveInt(campaign.batchIntervalMinutes, 65, 24 * 60) * 60 * 1000,
   };
 }
 
@@ -90,8 +90,8 @@ router.post("/campaigns", async (req, res): Promise<void> => {
   const { scheduledStartAt, ...rest } = parsed.data as typeof parsed.data & { scheduledStartAt?: string | null };
   const values = {
     ...rest,
-    batchSize: clampPositiveInt(rest.batchSize, 25),
-    batchIntervalMinutes: clampPositiveInt(rest.batchIntervalMinutes, 60, 24 * 60),
+    batchSize: clampPositiveInt(rest.batchSize, 16),
+    batchIntervalMinutes: clampPositiveInt(rest.batchIntervalMinutes, 65, 24 * 60),
     ...(scheduledStartAt ? { scheduledStartAt: new Date(scheduledStartAt) } : {}),
   };
   const [campaign] = await db.insert(campaignsTable).values(values).returning();
@@ -595,6 +595,8 @@ router.get("/campaigns/:id/replies", async (req, res): Promise<void> => {
         repliedAt: job.repliedAt ? job.repliedAt.toISOString() : null,
         subject: message?.subject ?? null,
         body: message?.body ?? null,
+        sentiment: message?.sentiment ?? null,
+        category: message?.category ?? null,
       };
     })
     .sort((a, b) => new Date(b.repliedAt ?? 0).getTime() - new Date(a.repliedAt ?? 0).getTime());

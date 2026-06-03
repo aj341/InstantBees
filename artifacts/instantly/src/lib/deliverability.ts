@@ -80,6 +80,9 @@ export interface DeliverabilityOverview {
     subject: string;
     score: number;
     severity: Severity;
+    originalSeverity?: Severity;
+    reviewed?: boolean;
+    reviewedAt?: string | null;
     issues: string[];
     linkCount: number;
     attachmentCount: number;

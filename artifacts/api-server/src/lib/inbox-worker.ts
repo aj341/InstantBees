@@ -210,6 +210,7 @@ async function pollAccount(account: typeof emailAccountsTable.$inferSelect): Pro
           subject,
           body,
           sentiment: classification.sentiment,
+          category: classification.category,
           campaignId: job.campaignId,
           leadId: job.leadId,
           receivedAt,

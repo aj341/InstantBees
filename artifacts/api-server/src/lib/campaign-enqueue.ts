@@ -23,8 +23,8 @@ function clampPositiveInt(value: unknown, fallback: number, max = 10_000): numbe
 
 function campaignBatchSettings(campaign: Pick<typeof campaignsTable.$inferSelect, "batchSize" | "batchIntervalMinutes">): { batchSize: number; batchIntervalMs: number } {
   return {
-    batchSize: clampPositiveInt(campaign.batchSize, 25),
-    batchIntervalMs: clampPositiveInt(campaign.batchIntervalMinutes, 60, 24 * 60) * 60 * 1000,
+    batchSize: clampPositiveInt(campaign.batchSize, 16),
+    batchIntervalMs: clampPositiveInt(campaign.batchIntervalMinutes, 65, 24 * 60) * 60 * 1000,
   };
 }
 
